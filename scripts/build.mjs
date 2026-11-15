@@ -11,7 +11,8 @@ const site = JSON.parse(await readFile(path.join(ROOT, 'site.json'), 'utf8'));
 
 /* ---------------- 解析 ---------------- */
 
-function parseFront(raw) {
+function parseFront(raw0) {
+  const raw = String(raw0).replace(/\r\n/g, '\n');
   const m = raw.match(/^---\n([\s\S]*?)\n---\n?/);
   if (!m) return { data: {}, body: raw };
   const data = {};
@@ -204,7 +205,7 @@ const shell = ({ title, description = '', body, active = '', toc = '', prefix = 
 <body>
 <header class="topbar">
   <a class="brand" href="/"><span class="logo">${esc(site.author || site.title.slice(0, 1))}</span>${esc(site.title)}</a>
-  <a class="search" href="/search/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>搜索文章…<span class="kbd">⌘K</span></a>
+  <a class="search" href="/search/"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>搜索文章…<span class="kbd">Ctrl K</span></a>
   <div class="top-actions">
     <button class="icon-btn" id="theme" type="button" title="切换主题"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M19.1 4.9l-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg></button>
   </div>

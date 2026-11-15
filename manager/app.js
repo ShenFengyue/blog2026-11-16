@@ -1,6 +1,6 @@
 // 写作界面：列表 / 编辑 / 预览 / 自动保存 / 删除 / 发布
 const $ = (id) => document.getElementById(id);
-const state = { posts: [], current: null, dirty: false, filter: 'all', dialogMode: 'new', timer: null };
+const state = { posts: [], current: null, dirty: false, filter: 'all', mode: 'new', timer: null, saving: false };
 
 const api = async (path, body) => {
   const res = await fetch(path, {
@@ -13,9 +13,9 @@ const api = async (path, body) => {
   return data;
 };
 
-const escHtml = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function toast(msg, ms = 2200) {
+function toast(msg, ms = 2400) {
   const t = $('toast');
   t.textContent = msg;
   t.classList.add('on');
@@ -30,10 +30,10 @@ function mdToHtml(md) {
   const out = [];
   let i = 0;
   const inline = (t) => {
-    let s = escHtml(t);
+    let s = esc(t);
     s = s.replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`);
     s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, a, u) => `<img src="${u}" alt="${a}">`);
-    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t2, u) => `<a href="${u}">${t2}</a>`);
+    s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t2, u) => `<a href="${u}" target="_blank" rel="noreferrer">${t2}</a>`);
     s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
     return s;
@@ -46,7 +46,7 @@ function mdToHtml(md) {
       const buf = [];
       while (i < lines.length && !/^```/.test(lines[i].trim())) buf.push(lines[i++]);
       i++;
-      out.push(`<pre>${escHtml(buf.join('\n'))}</pre>`);
+      out.push(`<pre>${esc(buf.join('\n'))}</pre>`);
       continue;
     }
     const h = line.match(/^(#{1,6})\s+(.*)$/);
@@ -74,38 +74,49 @@ function mdToHtml(md) {
   return out.join('\n');
 }
 
-/* ---------- 渲染 ---------- */
+/* ---------- 状态显示 ---------- */
+
+function setSave(kind, text) {
+  const d = $('savedot');
+  d.className = 'savedot' + (kind === 'dirty' ? ' dirty' : kind === 'err' ? ' err' : '');
+  $('save-state').textContent = text;
+}
 
 function countWords() {
-  const body = $('body').value;
-  return body.replace(/\s/g, '').length;
+  return $('body').value.replace(/\s/g, '').length;
 }
 
 function renderPreview() {
   const body = $('body').value;
   const title = $('title').value.trim();
   const chars = countWords();
-  $('words').textContent = `${chars} 字 · 约 ${Math.max(1, Math.round(chars / 350))} 分钟`;
-  $('pv-meta').textContent = title ? `${Math.max(1, Math.round(chars / 350))} 分钟` : '';
-  const head = title ? `<h1>${escHtml(title)}</h1>` : '';
-  const meta = $('date').value ? `<div style="font-size:11.5px;color:var(--muted);margin-bottom:14px">${escHtml($('date').value)}</div>` : '';
+  const mins = Math.max(1, Math.round(chars / 350));
+  $('words').textContent = chars ? `${chars} 字 · ${mins} 分钟` : '0 字';
   if (!title && !body.trim()) {
     $('pv-body').innerHTML = '<p class="pv-empty">还没有内容。</p>';
     return;
   }
+  const head = title ? `<h1>${esc(title)}</h1>` : '';
+  const meta = $('date').value ? `<div class="pvdate">${esc($('date').value)}</div>` : '';
   $('pv-body').innerHTML = head + meta + mdToHtml(body);
 }
 
+/* ---------- 列表 ---------- */
+
 function renderList() {
   const kw = $('q').value.trim().toLowerCase();
-  const items = state.posts.filter((p) => {
+  const all = state.posts;
+  $('c-all').textContent = all.length;
+  $('c-draft').textContent = all.filter((p) => p.draft).length;
+
+  const items = all.filter((p) => {
     if (state.filter === 'draft' && !p.draft) return false;
     if (state.filter === 'live' && p.draft) return false;
     return !kw || p.title.toLowerCase().includes(kw) || p.p.toLowerCase().includes(kw);
   });
 
   if (!items.length) {
-    $('list').innerHTML = '<p style="padding:14px 10px;color:var(--muted);font-size:12.5px">没有匹配的文章。</p>';
+    $('list').innerHTML = `<p class="list-empty">${kw ? '没有匹配的文章' : '还没有文章，点右上角「新建」'}</p>`;
     return;
   }
 
@@ -119,22 +130,22 @@ function renderList() {
   $('list').innerHTML = [...byYear.keys()]
     .sort((a, b) => b.localeCompare(a))
     .map(
-      (y) => `<div class="y-label">${y}</div>${byYear
+      (y) => `<div class="ylab"><span>${y}</span><span class="yr"></span><em>${byYear.get(y).length}</em></div>${byYear
         .get(y)
-        .map(
-          (p) => `<div class="row${state.current && state.current.p === p.p ? ' on' : ''}" data-p="${escHtml(p.p)}">
-  <div class="t">${escHtml(p.title)}${p.draft ? '<span class="badge">草稿</span>' : ''}</div>
-  <div class="d">${p.date.slice(5)}</div>
-  <button class="del" data-del="${escHtml(p.p)}" title="删除">×</button>
-</div>`
-        )
+        .map((p) => {
+          const on = state.current && state.current.p === p.p;
+          return `<div class="row${on ? ' on' : ''}" data-p="${esc(p.p)}" title="${esc(p.title)}">
+  ${p.draft ? '<i class="dmark"></i>' : ''}<span class="t">${esc(p.title)}</span><span class="rd">${p.date.slice(5)}</span>
+  <button class="del" data-del="${esc(p.p)}" title="删除">×</button>
+</div>`;
+        })
         .join('')}`
     )
     .join('');
 
   $('list').querySelectorAll('.row').forEach((row) => {
     row.addEventListener('click', (e) => {
-      if (e.target.dataset.del) return;
+      if (e.target.classList.contains('del')) return;
       openPost(row.dataset.p);
     });
   });
@@ -146,14 +157,12 @@ function renderList() {
   });
 }
 
-function setDirty(d) {
-  state.dirty = d;
-  $('save-state').textContent = d ? '未保存…' : state.current ? '已保存' : '未选择文章';
-  $('save-state').style.color = d ? 'var(--warn)' : '';
-  if (d) {
-    clearTimeout(state.timer);
-    state.timer = setTimeout(() => save(true), 4000);
-  }
+function markRow() {
+  $('list').querySelectorAll('.row').forEach((r) => {
+    const on = state.current && r.dataset.p === state.current.p;
+    r.classList.toggle('on', !!on);
+    if (on) r.scrollIntoView({ block: 'nearest' });
+  });
 }
 
 /* ---------- 操作 ---------- */
@@ -166,50 +175,66 @@ async function loadPosts() {
 async function openPost(p) {
   if (state.dirty) await save(true);
   const data = await api('/api/post?p=' + encodeURIComponent(p));
-  state.current = { p };
+  state.current = { p, summary: data.front.summary || '' };
   $('title').value = data.front.title || '';
   $('date').value = (data.front.date || '').toString().slice(0, 10);
   $('tags').value = (data.front.tags || []).join(', ');
   $('draft').checked = data.front.draft === true;
-  $('body').value = data.body.replace(/^\n+/, '');
-  $('path').textContent = p.split('/').pop().replace(/\.md$/, '');
+  $('body').value = data.body.replace(/^\n+/, '').replace(/\s+$/, '');
+  $('path').textContent = p.split('/').pop();
+  $('crumb').textContent = (data.front.date || '').toString().slice(0, 7).replace('-', ' / ');
   $('btn-del').disabled = false;
   $('btn-pub').disabled = false;
-  setDirty(false);
+  state.dirty = false;
+  setSave('saved', '已保存');
   renderPreview();
   renderList();
+  markRow();
   $('body').focus();
   $('body').setSelectionRange(0, 0);
+  $('doc').scrollTop = 0;
 }
 
-function currentPayload() {
+function payload() {
   return {
     p: state.current.p,
     title: $('title').value.trim(),
     date: $('date').value,
     tags: $('tags').value.split(/[,，]/).map((s) => s.trim()).filter(Boolean),
-    summary: '',
+    summary: state.current.summary || '',
     draft: $('draft').checked,
     body: $('body').value
   };
 }
 
 async function save(silent) {
-  if (!state.current) return;
+  if (!state.current || state.saving) return;
   clearTimeout(state.timer);
+  state.saving = true;
+  setSave('dirty', '保存中…');
   try {
-    await api('/api/save', currentPayload());
+    await api('/api/save', payload());
     state.dirty = false;
     const t = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-    $('save-state').textContent = `已保存 ${t}`;
-    $('save-state').style.color = '';
+    setSave('saved', `已保存 ${t}`);
     await loadPosts();
+    markRow();
     refreshGit();
-    if (!silent) toast('已保存到本地');
+    if (!silent) toast('已保存');
   } catch (e) {
-    $('save-state').textContent = '保存失败';
-    toast('保存失败：' + e.message, 4000);
+    setSave('err', '保存失败');
+    toast('保存失败：' + e.message, 4200);
+  } finally {
+    state.saving = false;
   }
+}
+
+function dirty() {
+  state.dirty = true;
+  setSave('dirty', '有改动未保存');
+  clearTimeout(state.timer);
+  state.timer = setTimeout(() => save(true), 3500);
+  renderPreview();
 }
 
 async function refreshGit() {
@@ -222,65 +247,63 @@ async function refreshGit() {
       return;
     }
     $('dot').classList.remove('bad');
-    $('repo-text').textContent = 'shenblog.vercel.app';
+    $('repo-text').textContent = s.remote ? '已连接 GitHub' : '本地仓库';
     $('git-state').textContent = s.changed ? `${s.changed} 个改动未发布` : '工作区干净';
   } catch {
     $('dot').classList.add('bad');
-    $('repo-text').textContent = '状态读取失败';
+    $('repo-text').textContent = '服务未响应';
   }
 }
 
 async function publish() {
   if (!state.current) return;
   $('btn-pub').disabled = true;
-  $('btn-pub').textContent = '发布中…';
+  $('pub-text').textContent = '发布中';
   try {
     if (state.dirty) await save(true);
     const r = await api('/api/publish', { message: `post: ${$('title').value.trim()}` });
     if (r.ok) {
-      toast(r.note || '已推送，Vercel 正在构建', 3600);
+      toast(r.note || '已推送，Vercel 正在构建', 4000);
       $('git-state').textContent = '已推送';
     } else {
       const bad = r.steps.find((s) => !s.ok);
-      toast(`发布中断：${bad ? bad.name + ' · ' + String(bad.detail).slice(0, 90) : '未知原因'}`, 6000);
+      toast(`发布中断 · ${bad ? bad.name + '：' + String(bad.detail).slice(0, 110) : '未知原因'}`, 7000);
     }
     refreshGit();
   } catch (e) {
-    toast('发布失败：' + e.message, 5000);
+    toast('发布失败：' + e.message, 6000);
   } finally {
     $('btn-pub').disabled = false;
-    $('btn-pub').textContent = '发布到 GitHub';
+    $('pub-text').textContent = '发布';
   }
 }
 
-function openDialog(mode, title, desc, value, okText, danger) {
-  state.dialogMode = mode;
+/* ---------- 弹窗 ---------- */
+
+function dialog(mode, title, desc, value, okText, danger) {
+  state.mode = mode;
   $('dlg-title').textContent = title;
   $('dlg-desc').textContent = desc;
   $('dlg-input').value = value || '';
   $('dlg-input').style.display = mode === 'confirm' ? 'none' : '';
   const ok = $('dlg-ok');
   ok.textContent = okText;
-  ok.className = danger ? 'ghost danger' : 'primary';
   ok.style.background = danger ? 'var(--danger)' : '';
-  ok.style.color = danger ? '#fff' : '';
   $('mask').classList.add('on');
-  if (mode !== 'confirm') $('dlg-input').focus();
+  if (mode !== 'confirm') setTimeout(() => $('dlg-input').focus(), 60);
 }
 
-function closeDialog() {
-  $('mask').classList.remove('on');
-}
+const closeDialog = () => $('mask').classList.remove('on');
 
 function askDelete(p) {
   const post = state.posts.find((x) => x.p === p);
-  openDialog('delete', '删除这篇文章？', `${post ? post.title : p}\n文件会从本地删除，下次发布会同步到线上。`, p, '删除', true);
+  dialog('delete', '删除这篇文章？', `${post ? post.title : p}\n文件会从本地删除，下一次发布时线上才会消失。`, p, '删除', true);
 }
 
-async function doDialog() {
-  if (state.dialogMode === 'new') {
+async function confirmDialog() {
+  if (state.mode === 'new') {
     const title = $('dlg-input').value.trim();
-    if (!title) return;
+    if (!title) { $('dlg-input').focus(); return; }
     const r = await api('/api/new', { title });
     closeDialog();
     await loadPosts();
@@ -288,32 +311,37 @@ async function doDialog() {
     toast('已创建草稿');
     return;
   }
-  if (state.dialogMode === 'delete') {
+  if (state.mode === 'delete') {
     const p = $('dlg-input').value;
-    await api('/api/delete', { p });
+    try {
+      await api('/api/delete', { p });
+    } catch (e) {
+      closeDialog();
+      toast('删除失败：' + e.message, 5000);
+      return;
+    }
     closeDialog();
     if (state.current && state.current.p === p) {
       state.current = null;
       state.dirty = false;
-      $('title').value = '';
-      $('body').value = '';
-      $('date').value = '';
-      $('tags').value = '';
-      $('path').textContent = '';
+      ['title', 'body', 'date', 'tags'].forEach((id) => ($(id).value = ''));
       $('draft').checked = false;
+      $('path').textContent = '';
+      $('crumb').textContent = '';
       $('btn-del').disabled = true;
       $('btn-pub').disabled = true;
-      $('save-state').textContent = '未选择文章';
+      setSave('', '未选择文章');
       $('words').textContent = '0 字';
-      $('pv-body').innerHTML = '<p class="pv-empty">选择或新建一篇文章。</p>';
+      $('pv-body').innerHTML = '<p class="pv-empty">选择一篇文章开始。</p>';
     }
     await loadPosts();
+    if (!state.current && state.posts.length) await openPost(state.posts[0].p);
     refreshGit();
-    toast('已删除。点「发布到 GitHub」同步到线上', 3200);
+    toast('已删除，发布后线上同步', 3400);
   }
 }
 
-/* ---------- 工具条 ---------- */
+/* ---------- 编辑工具 ---------- */
 
 function surround(before, after) {
   const ta = $('body');
@@ -323,19 +351,23 @@ function surround(before, after) {
   ta.value = ta.value.slice(0, s) + before + sel + after + ta.value.slice(e);
   ta.focus();
   ta.setSelectionRange(s + before.length, s + before.length + sel.length);
-  setDirty(true);
-  renderPreview();
+  dirty();
 }
 
 function linePrefix(prefix) {
   const ta = $('body');
   const s = ta.selectionStart;
   const lineStart = ta.value.lastIndexOf('\n', s - 1) + 1;
-  ta.value = ta.value.slice(0, lineStart) + prefix + ta.value.slice(lineStart);
+  const has = ta.value.slice(lineStart, lineStart + prefix.length) === prefix;
+  if (has) {
+    ta.value = ta.value.slice(0, lineStart) + ta.value.slice(lineStart + prefix.length);
+    ta.setSelectionRange(s - prefix.length, s - prefix.length);
+  } else {
+    ta.value = ta.value.slice(0, lineStart) + prefix + ta.value.slice(lineStart);
+    ta.setSelectionRange(s + prefix.length, s + prefix.length);
+  }
   ta.focus();
-  ta.setSelectionRange(s + prefix.length, s + prefix.length);
-  setDirty(true);
-  renderPreview();
+  dirty();
 }
 
 function insertText(text) {
@@ -344,8 +376,7 @@ function insertText(text) {
   ta.value = ta.value.slice(0, s) + text + ta.value.slice(s);
   ta.focus();
   ta.setSelectionRange(s + text.length, s + text.length);
-  setDirty(true);
-  renderPreview();
+  dirty();
 }
 
 const actions = {
@@ -361,38 +392,103 @@ const actions = {
   image: () => insertText('\n\n![](/uploads/)\n\n')
 };
 
+/* ---------- 主题 ---------- */
+
+const sunIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg>';
+const moonIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>';
+const eyeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.6"/></svg>';
+const eyeOffIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z"/><path d="M4 20 20 4"/></svg>';
+
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  $('btn-theme').innerHTML = t === 'dark' ? moonIcon : sunIcon;
+  localStorage.setItem('theme', t);
+}
+
 /* ---------- 事件 ---------- */
 
-const markDirty = () => {
-  setDirty(true);
-  renderPreview();
-};
-['title', 'date', 'tags', 'body'].forEach((id) => $(id).addEventListener('input', markDirty));
-$('draft').addEventListener('change', markDirty);
+['title', 'date', 'tags', 'body'].forEach((id) => $(id).addEventListener('input', dirty));
+$('draft').addEventListener('change', dirty);
 $('q').addEventListener('input', renderList);
-$('btn-refresh').onclick = async () => {
-  await loadPosts();
-  refreshGit();
-};
-$('btn-new').onclick = () => openDialog('new', '新建文章', '文件名会自动带上今天的日期，标题之后还能改。', '', '创建');
+$('btn-new').onclick = () => dialog('new', '新建文章', '文件名会自动带上今天的日期，标题之后还能改。', '', '创建');
 $('btn-del').onclick = () => state.current && askDelete(state.current.p);
 $('btn-pub').onclick = publish;
 $('dlg-cancel').onclick = closeDialog;
-$('dlg-ok').onclick = doDialog;
-$('dlg-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') doDialog();
+$('dlg-ok').onclick = confirmDialog;
+$('dlg-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmDialog(); });
+$('mask').addEventListener('click', (e) => { if (e.target.id === 'mask') closeDialog(); });
+
+function setPreview(on) {
+  $('main').classList.toggle('no-pv', !on);
+  $('btn-pv').innerHTML = on ? eyeIcon : eyeOffIcon;
+  $('btn-pv').style.color = on ? '' : 'var(--ink-4)';
+  localStorage.setItem('pv', on ? '1' : '0');
+}
+$('btn-pv').onclick = () => setPreview($('main').classList.contains('no-pv'));
+$('pv-close').onclick = () => setPreview(false);
+$('btn-theme').onclick = () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+
+/* ---------- 命令面板 ---------- */
+
+let palIdx = 0;
+let palItems = [];
+
+function palRender() {
+  const kw = $('pal-q').value.trim().toLowerCase();
+  palItems = state.posts
+    .filter((p) => !kw || p.title.toLowerCase().includes(kw) || p.p.toLowerCase().includes(kw))
+    .slice(0, 40);
+  palIdx = 0;
+  if (!palItems.length) {
+    $('pal-list').innerHTML = '<p class="pal-empty">没有匹配的文章</p>';
+    return;
+  }
+  $('pal-list').innerHTML = palItems
+    .map(
+      (p, i) =>
+        `<div class="pal-row${i === 0 ? ' on' : ''}" data-i="${i}"><span class="pt">${esc(p.title)}</span><span class="pd">${p.date}</span><span class="pk">↵</span></div>`
+    )
+    .join('');
+  $('pal-list').querySelectorAll('.pal-row').forEach((r) => {
+    r.onclick = () => pickPal(Number(r.dataset.i));
+  });
+}
+
+function palMove(d) {
+  const rows = $('pal-list').querySelectorAll('.pal-row');
+  if (!rows.length) return;
+  rows[palIdx].classList.remove('on');
+  palIdx = (palIdx + d + rows.length) % rows.length;
+  rows[palIdx].classList.add('on');
+  rows[palIdx].scrollIntoView({ block: 'nearest' });
+}
+
+function pickPal(i) {
+  const p = palItems[i];
+  closePalette();
+  if (p) openPost(p.p);
+}
+
+function openPalette() {
+  $('palette').classList.add('on');
+  $('pal-q').value = '';
+  palRender();
+  setTimeout(() => $('pal-q').focus(), 50);
+}
+const closePalette = () => $('palette').classList.remove('on');
+
+$('pal-q').addEventListener('input', palRender);
+$('pal-q').addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') { e.preventDefault(); palMove(1); }
+  if (e.key === 'ArrowUp') { e.preventDefault(); palMove(-1); }
+  if (e.key === 'Enter') { e.preventDefault(); pickPal(palIdx); }
+  if (e.key === 'Escape') closePalette();
 });
-$('mask').addEventListener('click', (e) => {
-  if (e.target.id === 'mask') closeDialog();
-});
-$('btn-pv').onclick = () => {
-  const off = $('main').classList.toggle('no-pv');
-  localStorage.setItem('pv-off', off ? '1' : '0');
-  $('btn-pv').style.color = off ? 'var(--faint)' : '';
-};
-document.querySelectorAll('.filters .chip').forEach((c) => {
+$('palette').addEventListener('click', (e) => { if (e.target.id === 'palette') closePalette(); });
+
+document.querySelectorAll('.segs .seg').forEach((c) => {
   c.onclick = () => {
-    document.querySelectorAll('.filters .chip').forEach((x) => x.classList.remove('on'));
+    document.querySelectorAll('.segs .seg').forEach((x) => x.classList.remove('on'));
     c.classList.add('on');
     state.filter = c.dataset.f;
     renderList();
@@ -403,11 +499,26 @@ document.querySelectorAll('.tools .tb').forEach((b) => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
-    e.preventDefault();
-    save();
+  const mod = e.metaKey || e.ctrlKey;
+  if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
+  if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); }
+  if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); actions.bold(); }
+  if (mod && e.key.toLowerCase() === 'i') { e.preventDefault(); actions.italic(); }
+  if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); dialog('new', '新建文章', '文件名会自动带上今天的日期，标题之后还能改。', '', '创建'); }
+  if (e.key === 'Escape') {
+    if ($('palette').classList.contains('on')) closePalette();
+    else if ($('mask').classList.contains('on')) closeDialog();
+    else if (document.activeElement === $('q')) $('body').focus();
   }
-  if (e.key === 'Escape' && $('mask').classList.contains('on')) closeDialog();
+});
+
+/* 点空白处继续写 */
+$('doc').addEventListener('click', (e) => {
+  if (e.target.id === 'doc' || e.target.classList.contains('col')) {
+    const ta = $('body');
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  }
 });
 
 /* 图片粘贴 / 拖入 */
@@ -418,7 +529,7 @@ async function uploadImage(file) {
     fr.readAsDataURL(file);
   });
   const r = await api('/api/upload', { name: file.name, data });
-  insertText(`\n\n![](${r.url})\n\n`);
+  insertText(`\n\n![${file.name.replace(/\.[^.]+$/, '')}](${r.url})\n\n`);
   toast('图片已插入');
 }
 $('body').addEventListener('paste', async (e) => {
@@ -435,24 +546,20 @@ $('body').addEventListener('drop', async (e) => {
   await uploadImage(file);
 });
 
-if (localStorage.getItem('pv-off') === '1') {
-  $('main').classList.add('no-pv');
-  $('btn-pv').style.color = 'var(--faint)';
-}
+/* ---------- 启动 ---------- */
 
-/* 点在空白处也能继续写 */
-document.querySelector('.doc').addEventListener('click', (e) => {
-  if (e.target.classList.contains('doc') || e.target.classList.contains('col')) {
-    const ta = $('body');
-    ta.focus();
-    ta.setSelectionRange(ta.value.length, ta.value.length);
-  }
-});
+const urlTheme = new URLSearchParams(location.search).get('theme');
+applyTheme(urlTheme || localStorage.getItem('theme') || 'light');
+setPreview(localStorage.getItem('pv') !== '0');
+setSave('', '未选择文章');
 
-setDirty(false);
 loadPosts()
-  .then(refreshGit)
+  .then(async () => {
+    refreshGit();
+    if (state.posts.length) await openPost(state.posts[0].p);
+  })
   .catch((e) => {
-    $('repo-text').textContent = '无法连接本地服务';
-    toast('无法连接本地服务：' + e.message, 5000);
+    $('repo-text').textContent = '服务未响应';
+    $('dot').classList.add('bad');
+    $('list').innerHTML = '<p class="list-empty">连不上本地服务<br>' + esc(e.message) + '</p>';
   });

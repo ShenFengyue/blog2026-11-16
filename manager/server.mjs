@@ -17,7 +17,8 @@ const json = (res, code, data) => {
   res.end(JSON.stringify(data));
 };
 
-const parseFront = (raw) => {
+const parseFront = (raw0) => {
+  const raw = String(raw0).replace(/\r\n/g, '\n');
   const m = raw.match(/^---\n([\s\S]*?)\n---\n?/);
   if (!m) return { data: {}, body: raw };
   const data = {};
