@@ -1,6 +1,6 @@
 // 本地管理器：只在 127.0.0.1 上跑，写文章 → 一键发布到 GitHub
 import { createServer } from 'node:http';
-import { readFile, writeFile, readdir, stat, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, readdir, stat, mkdir, unlink } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
@@ -112,8 +112,7 @@ async function savePost({ p, title, date, tags, summary, draft, body }) {
   return { ok: true, p };
 }
 
-async function newPost({ title }) {
-  const d = today();
+async function newPost({ title }) {  const d = today();
   const slug = `${d}-${safeName(title) || '未命名'}`;
   const dir = path.join(CONTENT, d.slice(0, 4));
   await mkdir(dir, { recursive: true });
@@ -122,6 +121,14 @@ async function newPost({ title }) {
   while (await stat(file).then(() => true, () => false)) file = path.join(dir, `${slug}-${n++}.md`);
   await writeFile(file, buildFile({ title: title || '未命名', date: d, tags: [], summary: '', draft: true, body: '' }), 'utf8');
   return { ok: true, p: path.relative(CONTENT, file).replace(/\\/g, '/') };
+}
+
+async function deletePost({ p }) {
+  const full = path.join(CONTENT, decodeURIComponent(p));
+  if (!full.startsWith(CONTENT)) throw new Error('路径不合法');
+  if (!full.toLowerCase().endsWith('.md')) throw new Error('只能删除 .md');
+  await unlink(full);
+  return { ok: true, p };
 }
 
 async function publish({ message }) {
@@ -227,6 +234,7 @@ const server = createServer(async (req, res) => {
       const payload = await readBody(req);
       if (url.pathname === '/api/save') return json(res, 200, await savePost(payload));
       if (url.pathname === '/api/new') return json(res, 200, await newPost(payload));
+      if (url.pathname === '/api/delete') return json(res, 200, await deletePost(payload));
       if (url.pathname === '/api/publish') return json(res, 200, await publish(payload));
       if (url.pathname === '/api/upload') return json(res, 200, await upload(payload));
       return json(res, 404, { error: '接口不存在' });
@@ -236,6 +244,19 @@ const server = createServer(async (req, res) => {
   } catch (e) {
     json(res, 500, { error: e.message });
   }
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    // 已经有一个管理器在跑，直接把窗口打开就行
+    if (process.env.OPEN_BROWSER === '1') {
+      execFile('cmd', ['/c', 'start', '', `http://127.0.0.1:${PORT}`], () => {});
+    }
+    setTimeout(() => process.exit(0), 1200);
+    return;
+  }
+  console.error(err);
+  process.exit(1);
 });
 
 server.listen(PORT, '127.0.0.1', () => {

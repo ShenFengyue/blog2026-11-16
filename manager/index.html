@@ -3,143 +3,207 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>博客管理器</title>
+<title>申·博客 · 写作</title>
 <style>
-:root{--bg:#fff;--panel:#fafaf9;--ink:#16181d;--muted:#6f7680;--line:#e8eaed;--hover:#f4f4f2;--accent:#2c5346;--accent-soft:#eef3f0;--warn:#b4772a;--ok:#2f7a5a;--mono:ui-monospace,"Cascadia Code",Consolas,monospace}
-html[data-theme="dark"]{--bg:#121316;--panel:#17181c;--ink:#e7e8ea;--muted:#9aa0a8;--line:#2a2c31;--hover:#1f2126;--accent:#7fb69f;--accent-soft:#1b2420;--warn:#d9a25f;--ok:#6bbd95}
-*{box-sizing:border-box}html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--ink);overflow:hidden;font:14px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
-button,input,textarea{font:inherit}button{cursor:pointer}
-.bar{height:56px;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid var(--line)}
-.logo{width:26px;height:26px;border-radius:6px;background:var(--ink);color:var(--bg);display:grid;place-items:center;font-size:13px;font-weight:600}
-.title{font-weight:600}
-.repo{display:flex;align-items:center;gap:6px;font:12.5px var(--mono);color:var(--muted)}
-.dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}.dot.off{background:var(--warn)}
-.spacer{margin-left:auto}
-.btn{height:32px;padding:0 12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:13px;transition:background .16s}
-.btn:hover{background:var(--hover)}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
-.btn.primary:hover{filter:brightness(1.08)}
-html[data-theme="dark"] .btn.primary{color:#12181a}
-.btn:disabled{opacity:.45;cursor:not-allowed}
-.body{height:calc(100% - 104px);display:grid;grid-template-columns:264px minmax(0,1fr) 380px}
-.list{border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-width:0}
-.list-head{padding:14px 12px 8px;display:flex;gap:6px}
-.filter{flex:1;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-size:12.5px;outline:none}
-.rows{overflow-y:auto;padding:4px 8px 20px;flex:1}
-.row{display:flex;gap:8px;align-items:flex-start;padding:9px 10px;border-radius:8px;cursor:pointer}
-.row:hover{background:var(--hover)}.row.on{background:var(--accent-soft)}
-.row .mark{width:6px;height:6px;border-radius:50%;margin-top:8px;flex:none;background:var(--ok)}.row .mark.draft{background:var(--warn)}
-.row .t{font-size:13.5px;line-height:1.45}.row.on .t{font-weight:600}
-.row .d{font:11.5px var(--mono);color:var(--muted);margin-top:2px}
-.editor{display:flex;flex-direction:column;min-width:0;min-height:0}
-.tabs{display:flex;gap:2px;padding:12px 16px 0;border-bottom:1px solid var(--line)}
-.tab{height:32px;padding:0 12px;border:0;background:none;color:var(--muted);font-size:13px;border-bottom:2px solid transparent;margin-bottom:-1px}
-.tab.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
-.fm{padding:16px 20px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:86px 1fr;gap:8px 12px;align-items:center}
-.fm label{font-size:12.5px;color:var(--muted)}
-.fm input[type=text],.fm input[type=date]{height:32px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font-size:13px;padding:0 10px;width:100%;outline:none}
-.fm input:focus{border-color:var(--accent)}
-.fm .draft{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
-.fm .path{grid-column:2;font:11.5px var(--mono);color:var(--muted);word-break:break-all}
-#body{flex:1;border:0;outline:none;resize:none;padding:18px 20px 40px;background:var(--bg);color:var(--ink);font:13.5px/1.85 var(--mono);min-height:0}
-.side{border-left:1px solid var(--line);display:flex;flex-direction:column;background:var(--panel);min-width:0}
-.side-head{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);letter-spacing:.04em}
-.preview{flex:1;overflow-y:auto;padding:24px;background:var(--bg);min-height:0;font-size:13.5px;line-height:1.8}
-.preview h1{font-size:19px;margin:0 0 8px}.preview h2{font-size:16px;margin:20px 0 8px}.preview h3{font-size:14.5px;margin:16px 0 6px}
-.preview p{margin:0 0 12px}.preview hr{border:0;border-top:1px solid var(--line);margin:18px 0}
-.preview code{font:12.5px var(--mono);background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:1px 4px}
-.preview img{max-width:100%;border-radius:6px}
-.preview .empty{color:var(--muted)}
-.publish{border-top:1px solid var(--line);padding:12px 16px 14px}
-.pub-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);margin-bottom:8px}
-.msg{width:100%;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:12px var(--mono);outline:none;margin-bottom:10px}
-.steps{list-style:none;margin:0;padding:0;font:12px var(--mono);max-height:150px;overflow-y:auto}
-.steps li{display:flex;gap:8px;padding:3px 0;color:var(--muted);align-items:flex-start}
-.steps li b{width:12px;flex:none;font-weight:400}
-.steps li.ok{color:var(--ink)}.steps li.ok b{color:var(--ok)}
-.steps li.bad{color:#c25b4d}.steps li.bad b{color:#c25b4d}
-.steps li span{word-break:break-all}
-.foot{height:48px;display:flex;align-items:center;gap:12px;padding:0 16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
-.foot .state{font-family:var(--mono)}.foot .sep{opacity:.4}
-.mask{position:fixed;inset:0;background:rgba(0,0,0,.28);display:none;place-items:center;z-index:50}
+:root{
+  --bg:#fff;--panel:#fafaf9;--panel2:#f4f4f2;--ink:#16181d;--ink2:#3d4148;--muted:#7b8189;--faint:#a9aea4;
+  --line:#ebebe7;--line2:#e0e0da;--accent:#2c5346;--accent-soft:#eef3f0;--warn:#b0701f;--danger:#b8453a;--ok:#2f7a5a;
+  --mono:ui-monospace,"Cascadia Code",Consolas,monospace;
+}
+html[data-theme="dark"]{
+  --bg:#121316;--panel:#17181c;--panel2:#1e2025;--ink:#e8e9eb;--ink2:#c3c6cb;--muted:#8f959d;--faint:#6a7078;
+  --line:#26282e;--line2:#2f3239;--accent:#7fb69f;--accent-soft:#1b2420;--warn:#d9a25f;--danger:#d97b70;--ok:#6bbd95;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);overflow:hidden;font:14px/1.6 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;-webkit-font-smoothing:antialiased}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+
+/* ---------- 顶栏 ---------- */
+.bar{height:54px;display:flex;align-items:center;gap:10px;padding:0 14px 0 16px;border-bottom:1px solid var(--line);background:var(--bg)}
+.mark{width:26px;height:26px;border-radius:7px;background:var(--ink);color:var(--bg);display:grid;place-items:center;font-size:13px;font-weight:600}
+.name{font-weight:600;letter-spacing:.01em}
+.tag{font-size:11.5px;color:var(--muted);background:var(--panel2);border-radius:5px;padding:2px 6px}
+.grow{flex:1}
+.site{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);text-decoration:none;padding:5px 9px;border-radius:7px}
+.site:hover{background:var(--panel2);color:var(--ink)}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.dot.bad{background:var(--warn)}
+.ghost{height:32px;padding:0 11px;border-radius:8px;font-size:13px;color:var(--ink2)}
+.ghost:hover{background:var(--panel2)}
+.primary{height:32px;padding:0 13px;border-radius:8px;font-size:13px;font-weight:600;background:var(--accent);color:#fff}
+.primary:hover{filter:brightness(1.08)}
+html[data-theme="dark"] .primary{color:#12181a}
+.primary:disabled{opacity:.5;cursor:not-allowed}
+
+/* ---------- 主布局 ---------- */
+.main{height:calc(100% - 98px);display:grid;grid-template-columns:272px minmax(0,1fr) 420px}
+.main.no-pv{grid-template-columns:272px minmax(0,1fr) 0}
+
+/* 列表 */
+.side{border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-width:0}
+.search-row{display:flex;gap:6px;padding:12px 12px 8px}
+.search{flex:1;height:30px;border:0;border-radius:7px;background:var(--panel2);padding:0 9px;font-size:12.5px;outline:none}
+.search::placeholder{color:var(--faint)}
+.iconbtn{width:30px;height:30px;border-radius:7px;color:var(--muted);display:grid;place-items:center;font-size:15px}
+.iconbtn:hover{background:var(--panel2);color:var(--ink)}
+.filters{display:flex;gap:4px;padding:0 12px 8px}
+.chip{height:24px;padding:0 9px;border-radius:6px;font-size:11.5px;color:var(--muted)}
+.chip.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.chip:hover{background:var(--panel2)}
+.list{flex:1;overflow-y:auto;padding:2px 8px 24px}
+.y-label{font-size:11px;letter-spacing:.1em;color:var(--faint);padding:10px 10px 4px}
+.row{position:relative;padding:8px 26px 8px 10px;border-radius:7px;cursor:pointer}
+.row:hover{background:var(--panel2)}
+.row.on{background:var(--accent-soft)}
+.row .t{font-size:13.5px;line-height:1.45;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row.on .t{font-weight:600}
+.row .d{font:11px var(--mono);color:var(--muted);margin-top:2px}
+.row .del{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:20px;height:20px;border-radius:5px;color:var(--faint);font-size:13px;display:none;place-items:center}
+.row:hover .del{display:grid}
+.row .del:hover{background:rgba(184,69,58,.12);color:var(--danger)}
+.badge{display:inline-block;margin-left:6px;font-size:10px;color:var(--warn);border:1px solid currentColor;border-radius:4px;padding:0 3px;vertical-align:1px}
+
+/* 编辑区 */
+.edit{display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+.doc{flex:1;overflow-y:auto;padding:36px 0 80px}
+.col{max-width:680px;margin:0 auto;padding:0 32px}
+#title{width:100%;border:0;outline:none;background:none;font-size:25px;font-weight:650;line-height:1.35;letter-spacing:-.01em;padding:0;margin:0 0 12px}
+#title::placeholder{color:var(--faint);font-weight:500}
+.metarow{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-bottom:16px;margin-bottom:6px;font-size:12.5px;color:var(--muted);border-bottom:1px solid var(--line)}
+.metarow input{background:none;border:0;outline:none;font-size:12.5px;color:var(--ink2);padding:2px 0}
+.metarow input.date{width:104px;font-family:var(--mono)}
+.metarow input.tags{width:180px}
+.metarow input::placeholder{color:var(--faint)}
+.toggle{display:flex;align-items:center;gap:6px;color:var(--muted);cursor:pointer;user-select:none}
+.toggle input{accent-color:var(--accent);width:13px;height:13px}
+.tools{display:flex;align-items:center;gap:2px;padding:8px 0 10px;position:sticky;top:0;background:var(--bg);z-index:5}
+.tools .tb{height:26px;min-width:26px;padding:0 7px;border-radius:6px;font-size:12px;color:var(--muted)}
+.tools .tb:hover{background:var(--panel2);color:var(--ink)}
+.tools .sep{width:1px;height:16px;background:var(--line);margin:0 6px}
+#body{width:100%;border:0;outline:none;resize:none;background:none;font-size:16px;line-height:1.92;letter-spacing:.005em;color:var(--ink);min-height:58vh;padding:0 0 40px}
+#body::placeholder{color:var(--faint)}
+
+/* 预览 */
+.pv{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-width:0;overflow:hidden}
+.pv-head{height:40px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:11.5px;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--line)}
+.pv-body{flex:1;overflow-y:auto;padding:28px 26px 60px;background:var(--bg);font-size:14px;line-height:1.85}
+.pv-body h1{font-size:22px;margin:0 0 10px;line-height:1.4}
+.pv-body h2{font-size:17px;margin:24px 0 8px}
+.pv-body h3{font-size:15px;margin:18px 0 6px}
+.pv-body p{margin:0 0 13px}
+.pv-body hr{border:0;border-top:1px solid var(--line);margin:20px 0}
+.pv-body code{font:12.5px var(--mono);background:var(--panel2);border-radius:3px;padding:1px 4px}
+.pv-body pre{background:var(--panel2);border-radius:8px;padding:12px 14px;overflow-x:auto;font:12.5px/1.7 var(--mono);margin:14px 0}
+.pv-body img{max-width:100%;border-radius:6px}
+.pv-body blockquote{margin:14px 0;padding-left:12px;border-left:2px solid var(--line2);color:var(--muted)}
+.pv-body a{color:var(--accent)}
+.pv-empty{color:var(--muted);font-size:13px}
+
+/* 状态栏 */
+.status{height:44px;display:flex;align-items:center;gap:10px;padding:0 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);background:var(--panel)}
+.status .s{font-family:var(--mono)}
+.status .d{opacity:.35}
+.status .danger{margin-left:auto;color:var(--danger)}
+.status .danger:hover{background:rgba(184,69,58,.1)}
+.status .danger:disabled{opacity:.35}
+
+/* 弹窗 / 提示 */
+.mask{position:fixed;inset:0;background:rgba(12,14,16,.34);display:none;place-items:center;z-index:60;backdrop-filter:blur(2px)}
 .mask.on{display:grid}
-.dialog{width:380px;background:var(--bg);border-radius:12px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
-.dialog h3{margin:0 0 4px;font-size:15px}.dialog p{margin:0 0 12px;font-size:12.5px;color:var(--muted)}
-.dialog input{width:100%;height:36px;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);outline:none;margin-bottom:14px}
-.dialog .actions{display:flex;justify-content:flex-end;gap:8px}
+.dlg{width:392px;background:var(--bg);border-radius:14px;padding:22px 22px 18px;box-shadow:0 24px 70px rgba(0,0,0,.26)}
+.dlg h3{margin:0 0 6px;font-size:15.5px}
+.dlg p{margin:0 0 16px;font-size:12.5px;color:var(--muted);line-height:1.7}
+.dlg input{width:100%;height:36px;border:0;border-radius:8px;background:var(--panel2);padding:0 11px;outline:none;margin-bottom:16px}
+.dlg .acts{display:flex;justify-content:flex-end;gap:8px}
+.dlg .danger{background:var(--danger);color:#fff}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(14px);opacity:0;background:#1d2024;color:#f2f3f5;font-size:12.5px;padding:9px 14px;border-radius:9px;transition:.2s ease;z-index:70;pointer-events:none;max-width:80vw;text-align:center}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
 <body>
 
-<div class="bar">
-  <div class="logo">申</div>
-  <div class="title">博客管理器</div>
-  <div class="repo"><span class="dot off" id="dot"></span><span id="repo-text">检查仓库…</span></div>
-  <div class="spacer"></div>
-  <button class="btn" id="btn-theme">暗色</button>
-  <button class="btn primary" id="btn-new">新建文章</button>
+<header class="bar">
+  <div class="mark">申</div>
+  <div class="name">申·博客</div>
+  <div class="tag">本地写作</div>
+  <div class="grow"></div>
+  <a class="site" id="site-link" href="https://shenblog.vercel.app" target="_blank"><span class="dot" id="dot"></span><span id="repo-text">检查仓库…</span></a>
+  <button class="ghost" id="btn-pv">预览</button>
+  <button class="primary" id="btn-new">新建</button>
+</header>
+
+<div class="main" id="main">
+  <aside class="side">
+    <div class="search-row">
+      <input class="search" id="q" placeholder="搜索标题…">
+      <button class="iconbtn" id="btn-refresh" title="刷新">↻</button>
+    </div>
+    <div class="filters">
+      <button class="chip on" data-f="all">全部</button>
+      <button class="chip" data-f="draft">草稿</button>
+      <button class="chip" data-f="live">已发布</button>
+    </div>
+    <div class="list" id="list"></div>
+  </aside>
+
+  <section class="edit">
+    <div class="doc">
+      <div class="col">
+        <input id="title" placeholder="无标题">
+        <div class="metarow">
+          <input class="date" id="date" placeholder="日期">
+          <input class="tags" id="tags" placeholder="添加标签，逗号分隔">
+          <label class="toggle"><input type="checkbox" id="draft"> 草稿</label>
+          <span id="path" style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--faint)"></span>
+        </div>
+        <div class="tools">
+          <button class="tb" data-md="h2" title="二级标题">H2</button>
+          <button class="tb" data-md="h3" title="三级标题">H3</button>
+          <span class="sep"></span>
+          <button class="tb" data-md="bold" title="粗体"><b>B</b></button>
+          <button class="tb" data-md="italic" title="斜体"><i>I</i></button>
+          <button class="tb" data-md="code" title="行内代码">&lt;/&gt;</button>
+          <span class="sep"></span>
+          <button class="tb" data-md="quote" title="引用">”</button>
+          <button class="tb" data-md="ul" title="列表">•</button>
+          <button class="tb" data-md="hr" title="分隔线">—</button>
+          <button class="tb" data-md="link" title="链接">🔗</button>
+          <button class="tb" data-md="image" title="图片（也可直接粘贴/拖入）">🖼</button>
+        </div>
+        <textarea id="body" spellcheck="false" placeholder="在这里写。Markdown 语法，图片可以直接粘贴或拖进来。"></textarea>
+      </div>
+    </div>
+  </section>
+
+  <aside class="pv" id="pv">
+    <div class="pv-head"><span>预览</span><span id="pv-meta"></span></div>
+    <div class="pv-body" id="pv-body"><p class="pv-empty">选择或新建一篇文章。</p></div>
+  </aside>
 </div>
 
-<div class="body">
-  <div class="list">
-    <div class="list-head">
-      <input class="filter" id="filter" placeholder="搜索标题…">
-      <button class="btn" id="btn-refresh" title="刷新列表" style="padding:0 10px">↻</button>
-    </div>
-    <div class="rows" id="rows"></div>
-  </div>
-
-  <div class="editor">
-    <div class="tabs">
-      <button class="tab on">编辑</button>
-      <button class="tab" disabled title="后续版本">差异</button>
-      <button class="tab" disabled title="后续版本">历史</button>
-    </div>
-    <div class="fm">
-      <label for="f-title">标题</label><input type="text" id="f-title" placeholder="文章标题">
-      <label for="f-date">日期</label><input type="date" id="f-date">
-      <label for="f-tags">标签</label><input type="text" id="f-tags" placeholder="用逗号分隔，例如 随想, 沟通">
-      <label for="f-sum">摘要</label><input type="text" id="f-sum" placeholder="留空自动取正文前 90 字">
-      <label for="f-draft">草稿</label>
-      <div class="draft"><input type="checkbox" id="f-draft"> 不发布到线上</div>
-      <div class="path" id="f-path">未选择文章</div>
-    </div>
-    <textarea id="body" spellcheck="false" placeholder="正文，Markdown 语法。可以把图片直接拖进来。"></textarea>
-  </div>
-
-  <div class="side">
-    <div class="side-head"><span>预览</span><span id="pv-meta"></span></div>
-    <div class="preview" id="preview"><p class="empty">左侧选择一篇文章，或点右上「新建文章」。</p></div>
-    <div class="publish">
-      <div class="pub-head"><span>发布</span><span id="pub-note"></span></div>
-      <input class="msg" id="msg" placeholder="commit 信息（留空自动生成）">
-      <ul class="steps" id="steps"></ul>
-    </div>
-  </div>
-</div>
-
-<div class="foot">
-  <span class="state" id="save-state">未选择文章</span>
-  <span class="sep">·</span>
-  <span class="state" id="git-state"></span>
-  <span class="spacer"></span>
-  <button class="btn" id="btn-save">保存 Ctrl+S</button>
-  <button class="btn primary" id="btn-publish">发布到 GitHub</button>
-</div>
+<footer class="status">
+  <span class="s" id="words">0 字</span><span class="d">·</span>
+  <span class="s" id="save-state">未选择文章</span><span class="d">·</span>
+  <span class="s" id="git-state"></span>
+  <button class="ghost danger" id="btn-del" disabled>删除</button>
+  <button class="primary" id="btn-pub" disabled>发布到 GitHub</button>
+</footer>
 
 <div class="mask" id="mask">
-  <div class="dialog">
-    <h3>新建文章</h3>
-    <p>文件名会自动带上今天的日期，标题之后还能改。</p>
-    <input id="new-title" placeholder="文章标题">
-    <div class="actions">
-      <button class="btn" id="new-cancel">取消</button>
-      <button class="btn primary" id="new-ok">创建</button>
+  <div class="dlg">
+    <h3 id="dlg-title">新建文章</h3>
+    <p id="dlg-desc">文件名会自动带上今天的日期。</p>
+    <input id="dlg-input" placeholder="文章标题">
+    <div class="acts">
+      <button class="ghost" id="dlg-cancel">取消</button>
+      <button class="primary" id="dlg-ok">创建</button>
     </div>
   </div>
 </div>
 
+<div class="toast" id="toast"></div>
 <script src="/app.js"></script>
 </body>
 </html>
