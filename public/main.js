@@ -2,9 +2,10 @@
 (() => {
   const root = document.documentElement;
 
-  // 主题
-  const saved = localStorage.getItem('theme');
-  if (saved) root.dataset.theme = saved;
+  // 主题（?theme=dark 可临时预览）
+  const forced = new URLSearchParams(location.search).get('theme');
+  const saved = forced || localStorage.getItem('theme');
+  if (saved === 'dark' || saved === 'light') root.dataset.theme = saved;
   const btn = document.getElementById('theme');
   if (btn) {
     btn.addEventListener('click', () => {
