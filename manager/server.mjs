@@ -9,11 +9,18 @@ import path from 'node:path';
 
 const ROOT = path.join(import.meta.dirname, '..');
 const CONTENT = path.join(ROOT, 'content', 'posts');
+const PAGE_DIR = path.join(ROOT, 'content');
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const DIST_DIR = path.join(ROOT, 'dist');
 const SITE_FILE = path.join(ROOT, 'site.json');
 const THEME_KEYS = ['classic', 'a', 'b', 'c', 'd'];
 const PORT = Number(process.env.PORT || 5178);
+
+// 固定页：不是文章，但云端有这一页，本地也要能改
+const PAGES = {
+  about: { file: 'about.md', label: '关于我', path: '/about/' },
+  nf: { file: '404.md', label: '404 页', path: '/404.html' }
+};
 
 /* ---------- 工具 ---------- */
 
@@ -171,8 +178,12 @@ async function saveSite(patch) {
     theme: THEME_KEYS.includes(String(patch.theme ?? cur.theme ?? 'classic').toLowerCase())
       ? String(patch.theme ?? cur.theme ?? 'classic').toLowerCase()
       : 'classic',
-    url: String(cur.url || '').trim()
+    url: String(patch.url ?? cur.url ?? '')
+      .trim()
+      .replace(/^https?:\/\//i, '')
+      .replace(/\/+$/, '')
   };
+  next.url = next.url ? `https://${next.url}` : '';
   if (!next.author) next.author = next.title.slice(0, 1);
   const text = JSON.stringify(next, null, 2) + '\n';
   await writeFile(SITE_FILE, text, 'utf8');
@@ -279,6 +290,45 @@ async function deletePost({ p }) {
   if (!full.toLowerCase().endsWith('.md')) throw new Error('只能删除 .md');
   await unlink(full);
   return { ok: true, p };
+}
+
+/* ---------- 固定页（关于我 / 404） ---------- */
+
+const PAGE_FALLBACK = {
+  about: { title: '关于我', body: '在这里写点关于自己的事。' },
+  nf: {
+    title: '页面不存在',
+    body: '这条链接可能已经变了。去 [首页](/) 或 [归档](/archive/) 找找。'
+  }
+};
+
+async function readPage(key) {
+  const meta = PAGES[key];
+  if (!meta) throw new Error('未知页面');
+  const full = path.join(PAGE_DIR, meta.file);
+  const raw = await readFile(full, 'utf8').catch(() => null);
+  const { data, body } = raw ? parseFront(raw) : { data: {}, body: '' };
+  const fb = PAGE_FALLBACK[key] || { title: meta.label, body: '' };
+  return {
+    key,
+    label: meta.label,
+    path: meta.path,
+    title: data.title || fb.title,
+    body: String(body || '').replace(/^\n+/, '').replace(/\s+$/, '') || (raw ? '' : fb.body),
+    exists: !!raw
+  };
+}
+
+async function savePage({ key, title, body }) {
+  const meta = PAGES[key];
+  if (!meta) throw new Error('未知页面');
+  const full = path.join(PAGE_DIR, meta.file);
+  if (!path.resolve(full).startsWith(path.resolve(PAGE_DIR))) throw new Error('路径不合法');
+  const t = String(title || meta.label).trim() || meta.label;
+  const text = ['---', `title: ${JSON.stringify(t)}`, '---', '', String(body || '').trim(), ''].join('\n');
+  await writeFile(full, text, 'utf8');
+  const build = await node(['scripts/build.mjs']);
+  return { ok: true, key, title: t, built: build.ok, out: build.ok ? '' : build.out.slice(-300) };
 }
 
 async function publish({ message }) {
@@ -500,6 +550,9 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/posts') return json(res, 200, await listPosts());
     if (req.method === 'GET' && url.pathname === '/api/status') return json(res, 200, await status());
     if (req.method === 'GET' && url.pathname === '/api/site') return json(res, 200, await readSite());
+    if (req.method === 'GET' && url.pathname === '/api/page') {
+      return json(res, 200, await readPage(url.searchParams.get('key') || ''));
+    }
 
     if (req.method === 'GET' && url.pathname === '/api/post') {
       const full = path.join(CONTENT, decodeURIComponent(url.searchParams.get('p') || ''));
@@ -513,6 +566,7 @@ const server = createServer(async (req, res) => {
       if (req.headers['x-manager'] !== '1' || !isLocalOrigin(req)) return json(res, 403, { error: '拒绝非本地请求' });
       const payload = await readBody(req);
       if (url.pathname === '/api/save') return json(res, 200, await savePost(payload));
+      if (url.pathname === '/api/save-page') return json(res, 200, await savePage(payload));
       if (url.pathname === '/api/new') return json(res, 200, await newPost(payload));
       if (url.pathname === '/api/delete') return json(res, 200, await deletePost(payload));
       if (url.pathname === '/api/publish') return json(res, 200, await publish(payload));

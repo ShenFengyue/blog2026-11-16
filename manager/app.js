@@ -1,6 +1,6 @@
 // 写作界面：列表 / 编辑 / 预览 / 自动保存 / 删除 / 发布 / 图片直传 / 站点信息
 const $ = (id) => document.getElementById(id);
-const state = { posts: [], site: null, current: null, dirty: false, mode: 'new', timer: null, saving: false, uploading: false };
+const state = { posts: [], site: null, current: null, dirty: false, mode: 'new', timer: null, saving: false, uploading: false, pageMeta: null };
 
 const api = async (path, body) => {
   const res = await fetch(path, {
@@ -187,6 +187,11 @@ async function openPost(p) {
   if (state.dirty) await save(true);
   const data = await api('/api/post?p=' + encodeURIComponent(p));
   state.current = { p, summary: data.front.summary || '' };
+  state.pageMeta = null;
+  $('meta').style.display = '';
+  $('btn-del').style.display = '';
+  $('btn-del').disabled = false;
+  renderPins();
   $('title').value = data.front.title || '';
   $('date').value = (data.front.date || '').toString().slice(0, 10);
   $('time').value = (data.front.time || '').toString().slice(0, 5);
@@ -201,6 +206,42 @@ async function openPost(p) {
   renderPreview();
   renderList();
   markRow();
+  $('body').focus();
+  $('body').setSelectionRange(0, 0);
+  $('doc').scrollTop = 0;
+}
+
+/* ---------- 固定页（关于我 / 404） ---------- */
+
+const PAGE_LABEL = { about: '关于我', nf: '404 页' };
+const PAGE_FILE = { about: 'content/about.md', nf: 'content/404.md' };
+
+function renderPins() {
+  const cur = state.current && state.current.page ? state.current.page : '';
+  $('pins').querySelectorAll('.pin').forEach((b) => b.classList.toggle('on', b.dataset.page === cur));
+}
+
+async function openPage(key) {
+  if (state.dirty) await save(true);
+  const data = await api('/api/page?key=' + encodeURIComponent(key));
+  state.current = { page: key };
+  state.pageMeta = data;
+  $('title').value = data.title || '';
+  $('date').value = '';
+  $('time').value = '';
+  $('tags').value = '';
+  $('body').value = data.body || '';
+  $('path').textContent = PAGE_FILE[key] || '';
+  $('crumb').textContent = '固定页 · ' + (data.label || PAGE_LABEL[key]);
+  $('meta').style.display = 'none';
+  $('btn-del').disabled = true;
+  $('btn-del').style.display = 'none';
+  $('btn-pub').disabled = false;
+  state.dirty = false;
+  setSave('saved', '已保存');
+  renderPreview();
+  $('list').querySelectorAll('.row').forEach((r) => r.classList.remove('on'));
+  renderPins();
   $('body').focus();
   $('body').setSelectionRange(0, 0);
   $('doc').scrollTop = 0;
@@ -223,7 +264,25 @@ async function save(silent) {
   clearTimeout(state.timer);
   state.saving = true;
   setSave('dirty', '保存中…');
+  const t = () => new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
   try {
+    if (state.current.page) {
+      const r = await api('/api/save-page', {
+        key: state.current.page,
+        title: $('title').value.trim(),
+        body: $('body').value
+      });
+      state.dirty = false;
+      if (!r.built) {
+        setSave('err', '重建失败');
+        toast('保存了，但站点重建失败：' + (r.out || '').slice(0, 140), 7000);
+      } else {
+        setSave('saved', `已保存 ${t()}`);
+        if (!silent) toast('已保存，发布后云端生效');
+      }
+      refreshGit();
+      return;
+    }
     const r = await api('/api/save', payload());
     state.dirty = false;
     // 改了日期后文件会被挪进对应年份，这里跟着换路径，左侧选中不会丢
@@ -233,8 +292,7 @@ async function save(silent) {
     }
     if (r.date) $('date').value = r.date;
     if (r.time !== undefined) $('time').value = r.time;
-    const t = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-    setSave('saved', `已保存 ${t}`);
+    setSave('saved', `已保存 ${t()}`);
     await loadPosts();
     markRow();
     refreshGit();
@@ -279,7 +337,11 @@ async function publish() {
   $('pub-text').textContent = '发布中';
   try {
     if (state.dirty) await save(true);
-    const r = await api('/api/publish', { message: `post: ${$('title').value.trim()}` });
+    const isPage = !!(state.current && state.current.page);
+    const msg = isPage
+      ? `page: 更新${PAGE_LABEL[state.current.page] || '固定页'}`
+      : `post: ${$('title').value.trim()}`;
+    const r = await api('/api/publish', { message: msg });
     if (r.ok) {
       toast(r.note || '已推送，Vercel 正在构建', 4000);
       $('git-state').textContent = '已推送';
@@ -341,8 +403,12 @@ async function confirmDialog() {
     closeDialog();
     if (state.current && state.current.p === p) {
       state.current = null;
+      state.pageMeta = null;
       state.dirty = false;
+      $('meta').style.display = '';
+      $('btn-del').style.display = '';
       ['title', 'body', 'date', 'time', 'tags'].forEach((id) => ($(id).value = ''));
+      renderPins();
       $('path').textContent = '';
       $('crumb').textContent = '';
       $('btn-del').disabled = true;
@@ -405,6 +471,7 @@ function openSite() {
   $('s-tagline').value = s.tagline || '';
   $('s-author').value = s.author || '';
   $('s-desc').value = s.description || '';
+  $('s-url').value = s.url || '';
   markTheme(s.theme);
   $('smask').classList.add('on');
   setTimeout(() => $('s-title').focus(), 60);
@@ -423,6 +490,7 @@ async function saveSite() {
       tagline: $('s-tagline').value.trim(),
       author: $('s-author').value.trim(),
       description: $('s-desc').value.trim(),
+      url: $('s-url').value.trim(),
       theme: state.theme || 'classic'
     });
     applySite(r.site);
@@ -601,6 +669,10 @@ $('dlg-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') confi
 $('mask').addEventListener('click', (e) => { if (e.target.id === 'mask') closeDialog(); });
 
 $('btn-site').onclick = openSite;
+$('pins').addEventListener('click', (e) => {
+  const b = e.target.closest('.pin');
+  if (b) openPage(b.dataset.page);
+});
 $('s-cancel').onclick = closeSite;
 $('s-ok').onclick = saveSite;
 $('s-preview').onclick = openPreview;

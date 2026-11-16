@@ -622,10 +622,15 @@ const aboutBody = `
   <p class="foot-note"><a href="/">← 回到首页</a></p>
 </div>`;
 
+// 404 页：正文来自 content/404.md，管理器里能改；没有这个文件就用默认文案
+const nfRaw = await readFile(path.join(CONTENT, '404.md'), 'utf8').catch(() => null);
+const nf = nfRaw
+  ? parseFront(nfRaw)
+  : { data: { title: '页面不存在' }, body: '这条链接可能已经变了。去 [首页](/) 或 [归档](/archive/) 找找。' };
 const notFoundBody = `
 <div class="doc">
-  <h1>页面不存在</h1>
-  <p class="lead">这条链接可能已经变了。去 <a href="/">首页</a> 或 <a href="/archive/">归档</a> 找找。</p>
+  <h1>${esc(nf.data.title || '页面不存在')}</h1>
+  <div class="content">${renderMarkdown(nf.body).html}</div>
 </div>`;
 
 /* ---------------- 写出 ---------------- */
