@@ -114,13 +114,7 @@
   .search input{flex:1;font-size:12.5px;min-width:0}
   .search input::placeholder{color:var(--ink-4)}
   .segs{display:flex;gap:2px;padding:0 14px 10px}
-  .seg{
-    padding:0 9px;height:25px;border-radius:6px;font-size:11.5px;color:var(--ink-3);
-    transition:all .14s;
-  }
-  .seg:hover{color:var(--ink);background:var(--shell-2)}
-  .seg.on{background:var(--paper);color:var(--ink);font-weight:600;box-shadow:var(--shadow-1),0 0 0 1px var(--line)}
-  .seg i{font-style:normal;color:var(--ink-4);margin-left:5px;font-size:10.5px;font-weight:400}
+  .side-meta{padding:0 15px 9px;font-size:10.5px;color:var(--ink-4);font-family:var(--mono);letter-spacing:.02em}
 
   .list{flex:1;overflow-y:auto;padding:2px 8px 24px}
   .ylab{
@@ -131,6 +125,11 @@
   .ylab span{flex:none}
   .ylab .yr{flex:1;height:1px;background:var(--line)}
   .ylab em{font-style:normal;font-family:var(--mono);letter-spacing:0;font-size:10px;color:var(--ink-4)}
+  .mlab{
+    display:flex;align-items:baseline;gap:8px;padding:9px 8px 3px;
+    font-size:10px;letter-spacing:.1em;color:var(--ink-4);font-family:var(--mono);
+  }
+  .mlab em{font-style:normal;letter-spacing:0;opacity:.7}
   .row{
     position:relative;display:flex;align-items:baseline;gap:8px;
     padding:5px 26px 5px 9px;border-radius:7px;cursor:pointer;
@@ -145,7 +144,6 @@
   }
   .rd{font-size:10.5px;color:var(--ink-4);font-family:var(--mono);flex:none}
   .chg{width:4px;height:4px;border-radius:50%;background:#b0782a;flex:none;margin-bottom:2px;opacity:.85}
-  .dmark{width:4px;height:4px;border-radius:50%;background:var(--accent);flex:none;opacity:.75;margin-bottom:1px}
   .del{
     position:absolute;right:4px;top:50%;transform:translateY(-50%);
     width:20px;height:20px;border-radius:5px;display:grid;place-items:center;
@@ -170,16 +168,15 @@
   }
   .meta input.date:hover{color:var(--ink-2)}
   .meta input.date::-webkit-calendar-picker-indicator{opacity:.35;cursor:pointer;scale:.85}
+  .meta input.time{
+    font-size:11.5px;color:var(--ink-3);font-family:var(--mono);letter-spacing:.02em;
+    width:74px;padding:2px 0;
+  }
+  .meta input.time:hover{color:var(--ink-2)}
+  .meta input.time::-webkit-calendar-picker-indicator{opacity:.35;cursor:pointer;scale:.85}
   .meta input.tags{font-size:11.5px;color:var(--ink-3);width:170px;padding:2px 0}
   .meta input.tags::placeholder{color:var(--ink-4)}
   .meta .sep{width:1px;height:12px;background:var(--line);flex:none}
-  .draft{display:flex;align-items:center;gap:7px;cursor:pointer;user-select:none}
-  .draft input{position:absolute;opacity:0;pointer-events:none}
-  .track{width:26px;height:14px;border-radius:99px;background:var(--line);position:relative;transition:background .16s}
-  .knob{position:absolute;top:2px;left:2px;width:10px;height:10px;border-radius:50%;background:var(--paper);box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .16s}
-  .draft input:checked+.track{background:var(--accent)}
-  .draft input:checked+.track .knob{transform:translateX(12px)}
-  .dtext{font-size:11.5px;color:var(--ink-3);letter-spacing:.02em}
 
   .tools{
     position:sticky;top:0;z-index:3;display:flex;gap:1px;align-items:center;
@@ -282,6 +279,16 @@
   .dlg-act{display:flex;justify-content:flex-end;gap:8px}
   .dlg-act .ghost{border:1px solid var(--line)}
   .dlg-act .primary{padding:0 14px}
+  .dlg.wide{width:432px}
+  .fld{display:flex;align-items:center;gap:10px;margin-bottom:11px}
+  .fld>span{width:40px;flex:none;font-size:11.5px;color:var(--ink-3);letter-spacing:.02em}
+  .fld input,.fld textarea{
+    flex:1;min-width:0;height:32px;padding:0 10px;border:1px solid var(--line);border-radius:8px;
+    font-size:12.5px;background:var(--shell);resize:none;
+  }
+  .fld textarea{height:auto;padding:7px 10px;line-height:1.6;font-size:12px}
+  .fld input:focus,.fld textarea:focus{border-color:color-mix(in srgb,var(--accent) 40%,var(--line));box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 8%,transparent)}
+  .fld input::placeholder,.fld textarea::placeholder{color:var(--ink-4)}
 
   .toast{
     position:fixed;left:50%;bottom:64px;transform:translate(-50%,8px);z-index:60;
@@ -337,16 +344,17 @@
 <div class="app">
   <header class="bar">
     <div class="brand">
-      <span class="mark">申</span>
+      <span class="mark" id="brand-mark">申</span>
       <div>
-        <div class="wordmark">申的博客</div>
-        <div class="sub">shenblog.vercel.app</div>
+        <div class="wordmark" id="brand-title">申的博客</div>
+        <div class="sub" id="brand-sub">shenblog.vercel.app</div>
       </div>
     </div>
     <div class="crumb" id="crumb"></div>
     <div class="bar-right">
       <div class="state"><i class="dot" id="dot"></i><span id="repo-text">连接中</span></div>
       <button class="icon" id="btn-focus" title="专注模式 Ctrl+\"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 4H4v5M15 4h5v5M15 20h5v-5M9 20H4v-5"/></svg></button>
+      <button class="icon" id="btn-site" title="站点信息（站名 / 标语）"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 8.9 19a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 4.5 15a1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 5 8.9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 4.5a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1A1.7 1.7 0 0 0 15 5a1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 19.5 9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
       <button class="icon" id="btn-theme" title="切换主题"></button>
       <button class="icon" id="btn-pv" title="预览面板"></button>
       <button class="ghost" id="btn-new" title="新建文章 Ctrl+N"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>新建</button>
@@ -361,11 +369,7 @@
           <input id="q" placeholder="搜索标题 Ctrl+K">
         </label>
       </div>
-      <div class="segs">
-        <button class="seg on" data-f="all">全部<i id="c-all"></i></button>
-        <button class="seg" data-f="draft">草稿<i id="c-draft"></i></button>
-        <button class="seg" data-f="live">已发布</button>
-      </div>
+      <div class="side-meta"><span id="count-note"></span></div>
       <div class="list" id="list"></div>
     </aside>
 
@@ -373,15 +377,10 @@
       <div class="col">
         <input id="title" class="title" placeholder="标题" spellcheck="false">
         <div class="meta">
-          <input id="date" class="date" type="date">
+          <input id="date" class="date" type="date" title="发布时间：改完文章会自动挪到对应年份，站点顺序也跟着变">
+          <input id="time" class="time" type="time" title="同一天多篇时的先后顺序（可留空）">
           <span class="sep"></span>
           <input id="tags" class="tags" placeholder="标签，逗号分隔">
-          <span class="sep"></span>
-          <label class="draft">
-            <input type="checkbox" id="draft">
-            <span class="track"><span class="knob"></span></span>
-            <span class="dtext">草稿</span>
-          </label>
         </div>
         <div class="tools" id="tools">
           <button class="tb" data-md="h2" title="二级标题"><b style="font-size:11px">H2</b></button>
@@ -437,6 +436,20 @@
     </div>
   </div>
 </div>
+<div class="mask" id="smask">
+  <div class="dlg wide">
+    <h3>站点信息</h3>
+    <p>保存后本地立刻重建，并自动提交推送到 GitHub，云端几十秒后生效。</p>
+    <label class="fld"><span>站名</span><input id="s-title" spellcheck="false" placeholder="申的博客"></label>
+    <label class="fld"><span>标语</span><input id="s-tagline" spellcheck="false" placeholder="move fast and break things"></label>
+    <label class="fld"><span>作者</span><input id="s-author" spellcheck="false" placeholder="申（顶栏左上角方块里的字）"></label>
+    <label class="fld"><span>简介</span><textarea id="s-desc" rows="2" spellcheck="false" placeholder="站点简介，用于搜索引擎与 RSS"></textarea></label>
+    <div class="dlg-act">
+      <button class="ghost" id="s-cancel" style="height:30px">取消</button>
+      <button class="primary" id="s-ok" style="height:30px">保存并同步</button>
+    </div>
+  </div>
+</div>
 <div class="palette" id="palette">
   <div class="pal">
     <div class="pal-in">
@@ -448,6 +461,7 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
+<input type="file" id="picker" accept="image/*" multiple hidden>
 <script src="/app.js"></script>
 </body>
 </html>

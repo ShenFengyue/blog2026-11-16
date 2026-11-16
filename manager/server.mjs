@@ -1,13 +1,16 @@
-// 本地管理器：只在 127.0.0.1 上跑，写文章 → 一键发布到 GitHub
+// 本地管理器：只在 127.0.0.1 上跑，写文章 / 传图片 / 改站点信息 → 自动同步到 GitHub
 import { createServer } from 'node:http';
-import { readFile, writeFile, readdir, stat, mkdir, unlink } from 'node:fs/promises';
+import { readFile, writeFile, readdir, stat, mkdir, unlink, rename } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const ROOT = path.join(import.meta.dirname, '..');
 const CONTENT = path.join(ROOT, 'content', 'posts');
 const PUBLIC_DIR = path.join(ROOT, 'public');
+const SITE_FILE = path.join(ROOT, 'site.json');
 const PORT = Number(process.env.PORT || 5178);
 
 /* ---------- 工具 ---------- */
@@ -35,17 +38,28 @@ const parseFront = (raw0) => {
   return { data, body: raw.slice(m[0].length) };
 };
 
-const buildFile = ({ title, date, tags, summary, draft, body }) => {
-  const lines = ['---', `title: ${JSON.stringify(title || '')}`, `date: ${date}`, `updated: ${new Date().toISOString().slice(0, 10)}`];
-  const t = (tags || []).filter(Boolean);
-  lines.push(`tags: [${t.join(', ')}]`);
+// 本机日期（UTC+8），不用 toISOString 的 UTC，避免凌晨写成前一天
+const today = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+
+const normDate = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(String(d || '')) ? String(d) : '');
+const normTime = (t) => {
+  const m = String(t || '').match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return '';
+  const hh = Math.min(23, Number(m[1]));
+  const mm = Math.min(59, Number(m[2]));
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+};
+
+const buildFile = ({ title, date, time, tags, summary, body }) => {
+  const lines = ['---', `title: ${JSON.stringify(title || '')}`, `date: ${date}`];
+  if (time) lines.push(`time: ${time}`);
+  lines.push(`updated: ${today()}`, `tags: [${(tags || []).filter(Boolean).join(', ')}]`);
   if (summary) lines.push(`summary: ${JSON.stringify(summary)}`);
-  lines.push(`draft: ${draft ? 'true' : 'false'}`, '---', '', body.trim(), '');
+  lines.push('---', '', String(body || '').trim(), '');
   return lines.join('\n');
 };
 
 const safeName = (t) => t.replace(/[\\/:*?"<>|]/g, '').replace(/[“”]/g, '').replace(/\s+/g, ' ').trim();
-const today = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 
 async function walk(dir) {
   const out = [];
@@ -57,10 +71,12 @@ async function walk(dir) {
   return out;
 }
 
-const git = (args, env = {}) =>
+const exists = (p) => stat(p).then(() => true, () => false);
+
+const git = (args) =>
   new Promise((resolve) => {
-    execFile('git', args, { cwd: ROOT, windowsHide: true, env: { ...process.env, ...env } }, (err, stdout, stderr) =>
-      resolve({ ok: !err, out: `${stdout || ''}${stderr || ''}`.trim(), err: err ? err.code : 0 })
+    execFile('git', args, { cwd: ROOT, windowsHide: true }, (err, stdout, stderr) =>
+      resolve({ ok: !err, out: `${stdout || ''}${stderr || ''}`.trim() })
     );
   });
 
@@ -71,7 +87,96 @@ const node = (args) =>
     );
   });
 
-/* ---------- 接口 ---------- */
+/* ---------- 自动提交推送（图片、站点信息） ---------- */
+// 合并 1.2 秒内的多次改动，一次提交一次推送，避免连续粘贴几张图产生一串 commit
+
+const queue = { paths: new Set(), msg: '', waiters: [], timer: null, running: false };
+
+function flushQueue() {
+  clearTimeout(queue.timer);
+  queue.timer = null;
+  if (queue.running) {
+    queue.timer = setTimeout(flushQueue, 1200);
+    return;
+  }
+  if (!queue.paths.size) return;
+  queue.running = true;
+  const paths = [...queue.paths];
+  const msg = queue.msg || 'assets: 更新图片';
+  const waiters = queue.waiters.splice(0);
+  queue.paths.clear();
+  queue.msg = '';
+  pushPaths(paths, msg).then((r) => {
+    queue.running = false;
+    waiters.forEach((w) => w.resolve(r));
+    if (queue.paths.size) queue.timer = setTimeout(flushQueue, 1200);
+  });
+}
+
+async function pushPaths(paths, message) {
+  const inRepo = await git(['rev-parse', '--is-inside-work-tree']);
+  if (!inRepo.ok) return { ok: false, committed: false, pushed: false, detail: '这个文件夹还不是 git 仓库' };
+
+  const changed = await git(['status', '--porcelain', '--', ...paths]);
+  if (!changed.out) return { ok: true, committed: false, pushed: false, detail: '没有变化' };
+
+  const add = await git(['add', '--', ...paths]);
+  if (!add.ok) return { ok: false, committed: false, pushed: false, detail: add.out };
+
+  // 只提交这几个路径，不碰正在改的文章
+  const commit = await git(['commit', '-m', message, '--', ...paths]);
+  if (!commit.ok) {
+    const hint = /Author identity unknown|Please tell me who you are/i.test(commit.out)
+      ? '还没设置 git 用户名/邮箱：git config --global user.name "名字" / user.email "邮箱"'
+      : commit.out;
+    return { ok: false, committed: false, pushed: false, detail: hint };
+  }
+
+  const push = await git(['push']);
+  if (!push.ok) {
+    const hint = /No configured push destination|does not appear to be a git repository|Could not read from remote/i.test(push.out)
+      ? '还没配置/连不上远程仓库，已在本地提交，等发布会一起推'
+      : push.out.split('\n').slice(-1)[0];
+    return { ok: true, committed: true, pushed: false, detail: hint };
+  }
+  return { ok: true, committed: true, pushed: true, detail: '已同步 GitHub' };
+}
+
+function queuePush(relPaths, message) {
+  for (const p of relPaths) queue.paths.add(p.replace(/\\/g, '/'));
+  queue.msg = message;
+  return new Promise((resolve) => {
+    queue.waiters.push({ resolve });
+    clearTimeout(queue.timer);
+    queue.timer = setTimeout(flushQueue, 1200);
+  });
+}
+
+/* ---------- 站点信息 ---------- */
+
+async function readSite() {
+  const raw = await readFile(SITE_FILE, 'utf8');
+  return JSON.parse(raw);
+}
+
+async function saveSite(patch) {
+  const cur = await readSite();
+  const next = {
+    title: String(patch.title ?? cur.title ?? '').trim().slice(0, 60) || '我的博客',
+    tagline: String(patch.tagline ?? cur.tagline ?? '').trim().slice(0, 200),
+    author: String(patch.author ?? cur.author ?? '').trim().slice(0, 20),
+    description: String(patch.description ?? cur.description ?? '').trim().slice(0, 300),
+    url: String(cur.url || '').trim()
+  };
+  if (!next.author) next.author = next.title.slice(0, 1);
+  const text = JSON.stringify(next, null, 2) + '\n';
+  await writeFile(SITE_FILE, text, 'utf8');
+  const build = await node(['scripts/build.mjs']);
+  const sync = await queuePush(['site.json'], `site: 更新站点信息「${next.title}」`);
+  return { ok: true, site: next, built: build.ok, buildOut: build.ok ? '' : build.out, sync };
+}
+
+/* ---------- 文章 ---------- */
 
 async function listPosts() {
   const files = await walk(CONTENT);
@@ -82,16 +187,23 @@ async function listPosts() {
     const { data } = parseFront(raw);
     const s = await stat(f);
     const rel = path.relative(CONTENT, f).replace(/\\/g, '/');
+    const mtimeDay = new Date(s.mtime.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
     items.push({
       p: rel,
       title: data.title || path.basename(f, '.md'),
-      date: (data.date || s.mtime.toISOString().slice(0, 10)).toString().slice(0, 10),
-      draft: data.draft === true,
+      date: (data.date || mtimeDay).toString().slice(0, 10),
+      time: normTime(data.time),
       changed: dirtyRaw.includes(`content/posts/${rel}`),
       mtime: s.mtimeMs
     });
   }
-  return items.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.title.localeCompare(a.title, 'zh-CN')));
+  const key = (p) => `${p.date} ${p.time || '00:00'}`;
+  return items.sort((a, b) => {
+    const ka = key(a);
+    const kb = key(b);
+    if (ka !== kb) return ka < kb ? 1 : -1;
+    return a.title.localeCompare(b.title, 'zh-CN');
+  });
 }
 
 async function status() {
@@ -109,27 +221,45 @@ async function status() {
   };
 }
 
-async function savePost({ p, title, date, tags, summary, draft, body }) {
-  const full = path.join(CONTENT, decodeURIComponent(p));
-  if (!full.startsWith(CONTENT)) throw new Error('路径不合法');
-  await writeFile(full, buildFile({ title, date, tags, summary, draft, body }), 'utf8');
-  return { ok: true, p };
+// 改日期时把文件挪进对应年份目录；文件名（地址）保持不动，旧链接不会失效
+async function relocate(full, date) {
+  const dir = path.join(CONTENT, date.slice(0, 4));
+  let target = path.join(dir, path.basename(full));
+  if (path.resolve(full) === path.resolve(target)) return full;
+  await mkdir(dir, { recursive: true });
+  let n = 2;
+  while (await exists(target)) target = path.join(dir, `${path.basename(full, '.md')}-${n++}.md`);
+  await rename(full, target);
+  return target;
 }
 
-async function newPost({ title }) {  const d = today();
+async function savePost({ p, title, date, time, tags, summary, body }) {
+  const full = path.join(CONTENT, decodeURIComponent(p));
+  if (!path.resolve(full).startsWith(path.resolve(CONTENT))) throw new Error('路径不合法');
+  const d = normDate(date) || today();
+  const t = normTime(time);
+  await writeFile(full, buildFile({ title, date: d, time: t, tags, summary, body }), 'utf8');
+  const moved = await relocate(full, d);
+  const rel = path.relative(CONTENT, moved).replace(/\\/g, '/');
+  return { ok: true, p: rel, date: d, time: t };
+}
+
+async function newPost({ title, date, time }) {
+  const d = normDate(date) || today();
+  const t = normTime(time);
   const slug = `${d}-${safeName(title) || '未命名'}`;
   const dir = path.join(CONTENT, d.slice(0, 4));
   await mkdir(dir, { recursive: true });
   let file = path.join(dir, `${slug}.md`);
   let n = 2;
-  while (await stat(file).then(() => true, () => false)) file = path.join(dir, `${slug}-${n++}.md`);
-  await writeFile(file, buildFile({ title: title || '未命名', date: d, tags: [], summary: '', draft: true, body: '' }), 'utf8');
+  while (await exists(file)) file = path.join(dir, `${slug}-${n++}.md`);
+  await writeFile(file, buildFile({ title: title || '未命名', date: d, time: t, tags: [], summary: '', body: '' }), 'utf8');
   return { ok: true, p: path.relative(CONTENT, file).replace(/\\/g, '/') };
 }
 
 async function deletePost({ p }) {
   const full = path.join(CONTENT, decodeURIComponent(p));
-  if (!full.startsWith(CONTENT)) throw new Error('路径不合法');
+  if (!path.resolve(full).startsWith(path.resolve(CONTENT))) throw new Error('路径不合法');
   if (!full.toLowerCase().endsWith('.md')) throw new Error('只能删除 .md');
   await unlink(full);
   return { ok: true, p };
@@ -172,37 +302,98 @@ async function publish({ message }) {
   return { ok: true, steps, note: '已推送。Vercel 会在 30–60 秒内自动重新部署。' };
 }
 
-async function upload({ name, data }) {
-  const m = String(data).match(/^data:(image\/(png|jpeg|jpg|webp|gif));base64,(.+)$/);
+/* ---------- 图片 ---------- */
+
+const MAX_BYTES = 12 * 1024 * 1024;
+const SHRINK_THRESHOLD = 1200 * 1024;
+
+const mimeExt = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/avif': 'avif',
+  'image/svg+xml': 'svg',
+  'image/bmp': 'bmp'
+};
+
+// 超过 1600 宽或体积偏大时，用系统自带的 System.Drawing 压一下；失败就用原图，不影响插入
+async function shrink(buf, ext) {
+  const src = path.join(os.tmpdir(), `blog-${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`);
+  const out = path.join(os.tmpdir(), `blog-${Date.now()}-${Math.random().toString(16).slice(2)}-s.${ext}`);
+  try {
+    await writeFile(src, buf);
+    const ps = path.join(ROOT, 'scripts', 'shrink-image.ps1');
+    const r = await new Promise((resolve) => {
+      execFile(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ps, '-In', src, '-Out', out, '-MaxWidth', '1600'],
+        { windowsHide: true, timeout: 20000 },
+        (err, stdout, stderr) => resolve({ ok: !err, out: `${stdout || ''}${stderr || ''}`.trim() })
+      );
+    });
+    if (!r.ok || !(await exists(out))) return buf;
+    const small = await readFile(out);
+    return small.length < buf.length * 0.92 ? small : buf;
+  } catch {
+    return buf;
+  } finally {
+    unlink(src).catch(() => {});
+    unlink(out).catch(() => {});
+  }
+}
+
+async function upload({ data }) {
+  const m = String(data || '').match(/^data:(image\/[a-z0-9.+-]+);base64,(.+)$/is);
   if (!m) throw new Error('只接受图片');
-  const ext = m[2] === 'jpeg' ? 'jpg' : m[2];
-  const buf = Buffer.from(m[3], 'base64');
-  if (buf.length > 8 * 1024 * 1024) throw new Error('图片超过 8MB');
+  const mime = m[1].toLowerCase();
+  let ext = mimeExt[mime];
+  if (!ext) throw new Error(`暂不支持这种图片格式：${mime}`);
+  let buf = Buffer.from(m[2], 'base64');
+  if (!buf.length) throw new Error('图片内容为空');
+  if (buf.length > MAX_BYTES) throw new Error('图片超过 12MB，请先压一下再粘贴');
+
+  if ((ext === 'png' || ext === 'jpg') && buf.length > SHRINK_THRESHOLD) {
+    buf = await shrink(buf, ext);
+  }
+
   const ym = today().slice(0, 7);
   const hash = createHash('sha1').update(buf).digest('hex').slice(0, 10);
-  const rel = path.join('uploads', ym, `${hash}.${ext}`);
-  const full = path.join(PUBLIC_DIR, rel);
+  const relDir = path.join('public', 'uploads', ym);
+  const relFile = path.join(relDir, `${hash}.${ext}`);
+  const full = path.join(ROOT, relFile);
   await mkdir(path.dirname(full), { recursive: true });
-  await writeFile(full, buf);
-  return { ok: true, url: '/' + rel.replace(/\\/g, '/') };
+  const fresh = !(await exists(full));
+  if (fresh) await writeFile(full, buf);
+
+  // 新图片立刻提交并推送，GitHub / Vercel 那边随时可用，不必等发文
+  const sync = fresh
+    ? await queuePush([relFile], `assets: 新增图片 ${ym}/${hash}.${ext}`)
+    : { ok: true, committed: false, pushed: false, detail: '图片已存在' };
+
+  return { ok: true, url: `/uploads/${ym}/${hash}.${ext}`, size: buf.length, sync };
 }
 
 /* ---------- 服务器 ---------- */
 
 const readBody = (req) =>
   new Promise((resolve, reject) => {
-    let data = '';
+    const chunks = [];
+    let size = 0;
     req.on('data', (c) => {
-      data += c;
-      if (data.length > 24 * 1024 * 1024) reject(new Error('请求体过大'));
+      size += c.length;
+      if (size > 40 * 1024 * 1024) reject(new Error('请求体过大'));
+      else chunks.push(c);
     });
     req.on('end', () => {
       try {
-        resolve(data ? JSON.parse(data) : {});
+        const raw = Buffer.concat(chunks).toString('utf8');
+        resolve(raw ? JSON.parse(raw) : {});
       } catch {
         reject(new Error('JSON 解析失败'));
       }
     });
+    req.on('error', reject);
   });
 
 const isLocalOrigin = (req) => {
@@ -211,6 +402,37 @@ const isLocalOrigin = (req) => {
   return /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(origin);
 };
 
+const MIME = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.svg': 'image/svg+xml',
+  '.bmp': 'image/bmp',
+  '.ico': 'image/x-icon'
+};
+
+// 管理器里预览要显示 /uploads 的图，顺便把 public 下的其它静态文件也放出去
+async function servePublic(urlPath, res) {
+  const rel = decodeURIComponent(urlPath).replace(/^\/+/, '');
+  const full = path.join(PUBLIC_DIR, rel);
+  if (!path.resolve(full).startsWith(path.resolve(PUBLIC_DIR))) {
+    json(res, 403, { error: '路径不合法' });
+    return;
+  }
+  const type = MIME[path.extname(full).toLowerCase()] || 'application/octet-stream';
+  try {
+    const s = await stat(full);
+    if (!s.isFile()) throw new Error('not file');
+    res.writeHead(200, { 'content-type': type, 'cache-control': 'no-cache', 'content-length': s.size });
+    createReadStream(full).pipe(res);
+  } catch {
+    json(res, 404, { error: '文件不存在' });
+  }
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
   try {
@@ -218,16 +440,20 @@ const server = createServer(async (req, res) => {
       const file = url.pathname === '/' ? 'index.html' : 'app.js';
       const type = file === 'app.js' ? 'text/javascript; charset=utf-8' : 'text/html; charset=utf-8';
       const content = await readFile(path.join(import.meta.dirname, file));
-      res.writeHead(200, { 'content-type': type }).end(content);
+      res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' }).end(content);
       return;
     }
 
+    if (req.method === 'GET' && url.pathname.startsWith('/uploads/')) return servePublic(url.pathname, res);
+    if (req.method === 'GET' && url.pathname === '/style.css') return servePublic(url.pathname, res);
+
     if (req.method === 'GET' && url.pathname === '/api/posts') return json(res, 200, await listPosts());
     if (req.method === 'GET' && url.pathname === '/api/status') return json(res, 200, await status());
+    if (req.method === 'GET' && url.pathname === '/api/site') return json(res, 200, await readSite());
 
     if (req.method === 'GET' && url.pathname === '/api/post') {
       const full = path.join(CONTENT, decodeURIComponent(url.searchParams.get('p') || ''));
-      if (!full.startsWith(CONTENT)) return json(res, 400, { error: '路径不合法' });
+      if (!path.resolve(full).startsWith(path.resolve(CONTENT))) return json(res, 400, { error: '路径不合法' });
       const raw = await readFile(full, 'utf8');
       const { data, body } = parseFront(raw);
       return json(res, 200, { p: url.searchParams.get('p'), front: data, body });
@@ -241,6 +467,7 @@ const server = createServer(async (req, res) => {
       if (url.pathname === '/api/delete') return json(res, 200, await deletePost(payload));
       if (url.pathname === '/api/publish') return json(res, 200, await publish(payload));
       if (url.pathname === '/api/upload') return json(res, 200, await upload(payload));
+      if (url.pathname === '/api/settings') return json(res, 200, await saveSite(payload));
       return json(res, 404, { error: '接口不存在' });
     }
 

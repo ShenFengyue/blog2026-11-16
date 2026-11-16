@@ -1,6 +1,6 @@
-// 写作界面：列表 / 编辑 / 预览 / 自动保存 / 删除 / 发布
+// 写作界面：列表 / 编辑 / 预览 / 自动保存 / 删除 / 发布 / 图片直传 / 站点信息
 const $ = (id) => document.getElementById(id);
-const state = { posts: [], current: null, dirty: false, filter: 'all', mode: 'new', timer: null, saving: false };
+const state = { posts: [], site: null, current: null, dirty: false, mode: 'new', timer: null, saving: false, uploading: false };
 
 const api = async (path, body) => {
   const res = await fetch(path, {
@@ -97,50 +97,61 @@ function renderPreview() {
     return;
   }
   const head = title ? `<h1>${esc(title)}</h1>` : '';
-  const meta = $('date').value ? `<div class="pvdate">${esc($('date').value)}</div>` : '';
+  const date = $('date').value;
+  const time = $('time').value;
+  const meta = date ? `<div class="pvdate">${esc(date)}${time ? ' · ' + esc(time) : ''}</div>` : '';
   $('pv-body').innerHTML = head + meta + mdToHtml(body);
 }
 
-/* ---------- 列表 ---------- */
+/* ---------- 列表（年 → 月） ---------- */
+
+const rowHtml = (p) => {
+  const on = state.current && state.current.p === p.p;
+  return `<div class="row${on ? ' on' : ''}" data-p="${esc(p.p)}" title="${esc(p.title)}">
+  <span class="t">${esc(p.title)}</span>${p.changed ? '<i class="chg" title="有改动未发布"></i>' : ''}<span class="rd">${p.date.slice(8)}</span>
+  <button class="del" data-del="${esc(p.p)}" title="删除">×</button>
+</div>`;
+};
 
 function renderList() {
   const kw = $('q').value.trim().toLowerCase();
   const all = state.posts;
-  $('c-all').textContent = all.length;
-  $('c-draft').textContent = all.filter((p) => p.draft).length;
+  $('count-note').textContent = `共 ${all.length} 篇`;
 
-  const items = all.filter((p) => {
-    if (state.filter === 'draft' && !p.draft) return false;
-    if (state.filter === 'live' && p.draft) return false;
-    return !kw || p.title.toLowerCase().includes(kw) || p.p.toLowerCase().includes(kw);
-  });
+  const items = all.filter((p) => !kw || p.title.toLowerCase().includes(kw) || p.p.toLowerCase().includes(kw));
 
   if (!items.length) {
     $('list').innerHTML = `<p class="list-empty">${kw ? '没有匹配的文章' : '还没有文章，点右上角「新建」'}</p>`;
     return;
   }
 
+  // 年 → 月；只渲染真实存在文章的月份
   const byYear = new Map();
   for (const p of items) {
     const y = p.date.slice(0, 4);
-    if (!byYear.has(y)) byYear.set(y, []);
-    byYear.get(y).push(p);
+    const m = p.date.slice(5, 7);
+    if (!byYear.has(y)) byYear.set(y, new Map());
+    const ms = byYear.get(y);
+    if (!ms.has(m)) ms.set(m, []);
+    ms.get(m).push(p);
   }
 
   $('list').innerHTML = [...byYear.keys()]
     .sort((a, b) => b.localeCompare(a))
-    .map(
-      (y) => `<div class="ylab"><span>${y}</span><span class="yr"></span><em>${byYear.get(y).length}</em></div>${byYear
-        .get(y)
-        .map((p) => {
-          const on = state.current && state.current.p === p.p;
-          return `<div class="row${on ? ' on' : ''}" data-p="${esc(p.p)}" title="${esc(p.title)}">
-  ${p.draft ? '<i class="dmark"></i>' : ''}<span class="t">${esc(p.title)}</span>${p.changed ? '<i class="chg" title="有改动未发布"></i>' : ''}<span class="rd">${p.date.slice(5)}</span>
-  <button class="del" data-del="${esc(p.p)}" title="删除">×</button>
-</div>`;
-        })
-        .join('')}`
-    )
+    .map((y) => {
+      const ms = byYear.get(y);
+      const total = [...ms.values()].reduce((n, list) => n + list.length, 0);
+      return (
+        `<div class="ylab"><span>${y}</span><span class="yr"></span><em>${total}</em></div>` +
+        [...ms.keys()]
+          .sort((a, b) => b.localeCompare(a))
+          .map(
+            (m) =>
+              `<div class="mlab"><span>${Number(m)}月</span><em>${ms.get(m).length}</em></div>` + ms.get(m).map(rowHtml).join('')
+          )
+          .join('')
+      );
+    })
     .join('');
 
   $('list').querySelectorAll('.row').forEach((row) => {
@@ -178,8 +189,8 @@ async function openPost(p) {
   state.current = { p, summary: data.front.summary || '' };
   $('title').value = data.front.title || '';
   $('date').value = (data.front.date || '').toString().slice(0, 10);
+  $('time').value = (data.front.time || '').toString().slice(0, 5);
   $('tags').value = (data.front.tags || []).join(', ');
-  $('draft').checked = data.front.draft === true;
   $('body').value = data.body.replace(/^\n+/, '').replace(/\s+$/, '');
   $('path').textContent = p.split('/').pop();
   $('crumb').textContent = (data.front.date || '').toString().slice(0, 7).replace('-', ' / ');
@@ -200,9 +211,9 @@ function payload() {
     p: state.current.p,
     title: $('title').value.trim(),
     date: $('date').value,
+    time: $('time').value,
     tags: $('tags').value.split(/[,，]/).map((s) => s.trim()).filter(Boolean),
     summary: state.current.summary || '',
-    draft: $('draft').checked,
     body: $('body').value
   };
 }
@@ -213,8 +224,15 @@ async function save(silent) {
   state.saving = true;
   setSave('dirty', '保存中…');
   try {
-    await api('/api/save', payload());
+    const r = await api('/api/save', payload());
     state.dirty = false;
+    // 改了日期后文件会被挪进对应年份，这里跟着换路径，左侧选中不会丢
+    if (r.p && r.p !== state.current.p) {
+      state.current.p = r.p;
+      $('path').textContent = r.p.split('/').pop();
+    }
+    if (r.date) $('date').value = r.date;
+    if (r.time !== undefined) $('time').value = r.time;
     const t = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
     setSave('saved', `已保存 ${t}`);
     await loadPosts();
@@ -308,7 +326,7 @@ async function confirmDialog() {
     closeDialog();
     await loadPosts();
     await openPost(r.p);
-    toast('已创建草稿');
+    toast('已新建文章');
     return;
   }
   if (state.mode === 'delete') {
@@ -324,8 +342,7 @@ async function confirmDialog() {
     if (state.current && state.current.p === p) {
       state.current = null;
       state.dirty = false;
-      ['title', 'body', 'date', 'tags'].forEach((id) => ($(id).value = ''));
-      $('draft').checked = false;
+      ['title', 'body', 'date', 'time', 'tags'].forEach((id) => ($(id).value = ''));
       $('path').textContent = '';
       $('crumb').textContent = '';
       $('btn-del').disabled = true;
@@ -338,6 +355,54 @@ async function confirmDialog() {
     if (!state.current && state.posts.length) await openPost(state.posts[0].p);
     refreshGit();
     toast('已删除，发布后线上同步', 3400);
+  }
+}
+
+/* ---------- 站点信息 ---------- */
+
+function applySite(site) {
+  state.site = site;
+  $('brand-mark').textContent = site.author || (site.title || '').slice(0, 1) || '申';
+  $('brand-title').textContent = site.title || '我的博客';
+  $('brand-sub').textContent = (site.url || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+}
+
+function openSite() {
+  const s = state.site || {};
+  $('s-title').value = s.title || '';
+  $('s-tagline').value = s.tagline || '';
+  $('s-author').value = s.author || '';
+  $('s-desc').value = s.description || '';
+  $('smask').classList.add('on');
+  setTimeout(() => $('s-title').focus(), 60);
+}
+
+const closeSite = () => $('smask').classList.remove('on');
+
+async function saveSite() {
+  const title = $('s-title').value.trim();
+  if (!title) { $('s-title').focus(); return; }
+  $('s-ok').disabled = true;
+  $('s-ok').textContent = '同步中…';
+  try {
+    const r = await api('/api/settings', {
+      title,
+      tagline: $('s-tagline').value.trim(),
+      author: $('s-author').value.trim(),
+      description: $('s-desc').value.trim()
+    });
+    applySite(r.site);
+    closeSite();
+    const sync = r.sync || {};
+    if (sync.pushed) toast('已保存并同步 GitHub，云端几十秒后生效', 4200);
+    else if (sync.committed) toast('已保存并提交，但没推上去：' + (sync.detail || '').slice(0, 80), 6000);
+    else toast('已保存到本地，下次发布时一起推送', 4200);
+    refreshGit();
+  } catch (e) {
+    toast('保存失败：' + e.message, 5000);
+  } finally {
+    $('s-ok').disabled = false;
+    $('s-ok').textContent = '保存并同步';
   }
 }
 
@@ -389,8 +454,91 @@ const actions = {
   ul: () => linePrefix('- '),
   hr: () => insertText('\n\n---\n\n'),
   link: () => surround('[', '](https://)'),
-  image: () => insertText('\n\n![](/uploads/)\n\n')
+  image: () => $('picker').click()
 };
+
+/* ---------- 图片：粘贴 / 拖入 / 选择文件 → 上传 GitHub → 自动引用 ---------- */
+
+const extMime = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  bmp: 'image/bmp'
+};
+
+const isImage = (f) => f && (f.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|avif|bmp)$/i.test(f.name || ''));
+
+const toDataURL = (file) =>
+  new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      let url = String(fr.result || '');
+      const ext = (file.name || '').split('.').pop().toLowerCase();
+      const m = url.match(/^data:(.*?);base64,/i);
+      // 有些系统拖进来的图 type 是空的，按扩展名补上正确的 MIME
+      if (m && (!m[1] || m[1] === 'application/octet-stream') && extMime[ext]) {
+        url = url.replace(/^data:.*?;base64,/i, `data:${extMime[ext]};base64,`);
+      }
+      resolve(url);
+    };
+    fr.onerror = () => reject(new Error('读取图片失败'));
+    fr.readAsDataURL(file);
+  });
+
+const altOf = (file) => {
+  const base = String(file.name || '').replace(/\.[^.]+$/, '').trim();
+  if (!base || /^(image|pasted|screenshot|snipaste|屏幕截图|微信图片)$/i.test(base)) return '';
+  return base.replace(/[\[\]]/g, '');
+};
+
+async function uploadImages(files) {
+  const imgs = [...files].filter(isImage);
+  if (!imgs.length) return;
+  if (state.uploading) { toast('上一批图片还在上传，稍等一下', 3000); return; }
+
+  const ta = $('body');
+  const pos = document.activeElement === ta ? ta.selectionStart : ta.value.length;
+  const lines = [];
+  let pushed = 0;
+  let failed = 0;
+
+  state.uploading = true;
+  toast(`正在上传 ${imgs.length} 张图片…`, 9000);
+  try {
+    for (let i = 0; i < imgs.length; i++) {
+      const f = imgs[i];
+      try {
+        const data = await toDataURL(f);
+        const r = await api('/api/upload', { name: f.name, data });
+        lines.push(`![${altOf(f)}](${r.url})`);
+        if (r.sync && r.sync.pushed) pushed += 1;
+        toast(`上传中 ${i + 1}/${imgs.length}…`, 9000);
+      } catch (e) {
+        failed += 1;
+        toast(`第 ${i + 1} 张失败：${e.message}`, 5000);
+      }
+    }
+  } finally {
+    state.uploading = false;
+  }
+
+  if (!lines.length) return;
+
+  const text = `\n\n${lines.join('\n\n')}\n\n`;
+  const at = Math.min(pos, ta.value.length);
+  ta.value = ta.value.slice(0, at) + text + ta.value.slice(at);
+  ta.focus();
+  ta.setSelectionRange(at + text.length, at + text.length);
+  dirty();
+  await save(true);
+
+  if (failed) toast(`${lines.length} 张已插入，${failed} 张失败`, 4000);
+  else if (pushed === lines.length) toast(`${lines.length} 张图片已上传 GitHub，云端已同步`, 3400);
+  else toast(`${lines.length} 张图片已插入，本地已保存，发布时一起推送`, 3600);
+}
 
 /* ---------- 主题 ---------- */
 
@@ -407,16 +555,20 @@ function applyTheme(t) {
 
 /* ---------- 事件 ---------- */
 
-['title', 'date', 'tags', 'body'].forEach((id) => $(id).addEventListener('input', dirty));
-$('draft').addEventListener('change', dirty);
+['title', 'date', 'time', 'tags', 'body'].forEach((id) => $(id).addEventListener('input', dirty));
 $('q').addEventListener('input', renderList);
-$('btn-new').onclick = () => dialog('new', '新建文章', '文件名会自动带上今天的日期，标题之后还能改。', '', '创建');
+$('btn-new').onclick = () => dialog('new', '新建文章', '文件名会自动带上今天的日期，标题和日期之后都能改。', '', '创建');
 $('btn-del').onclick = () => state.current && askDelete(state.current.p);
 $('btn-pub').onclick = publish;
 $('dlg-cancel').onclick = closeDialog;
 $('dlg-ok').onclick = confirmDialog;
 $('dlg-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmDialog(); });
 $('mask').addEventListener('click', (e) => { if (e.target.id === 'mask') closeDialog(); });
+
+$('btn-site').onclick = openSite;
+$('s-cancel').onclick = closeSite;
+$('s-ok').onclick = saveSite;
+$('smask').addEventListener('click', (e) => { if (e.target.id === 'smask') closeSite(); });
 
 function setPreview(on) {
   $('main').classList.toggle('no-pv', !on);
@@ -493,14 +645,6 @@ $('pal-q').addEventListener('keydown', (e) => {
 });
 $('palette').addEventListener('click', (e) => { if (e.target.id === 'palette') closePalette(); });
 
-document.querySelectorAll('.segs .seg').forEach((c) => {
-  c.onclick = () => {
-    document.querySelectorAll('.segs .seg').forEach((x) => x.classList.remove('on'));
-    c.classList.add('on');
-    state.filter = c.dataset.f;
-    renderList();
-  };
-});
 document.querySelectorAll('.tools .tb').forEach((b) => {
   b.onclick = () => actions[b.dataset.md]();
 });
@@ -511,10 +655,11 @@ document.addEventListener('keydown', (e) => {
   if (mod && e.key.toLowerCase() === 'k') { e.preventDefault(); openPalette(); }
   if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); actions.bold(); }
   if (mod && e.key.toLowerCase() === 'i') { e.preventDefault(); actions.italic(); }
-  if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); dialog('new', '新建文章', '文件名会自动带上今天的日期，标题之后还能改。', '', '创建'); }
+  if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); dialog('new', '新建文章', '文件名会自动带上今天的日期，标题和日期之后都能改。', '', '创建'); }
   if (mod && e.key === '\\') { e.preventDefault(); setFocus(!document.querySelector('.app').classList.contains('focus')); }
   if (e.key === 'Escape') {
     if ($('palette').classList.contains('on')) closePalette();
+    else if ($('smask').classList.contains('on')) closeSite();
     else if ($('mask').classList.contains('on')) closeDialog();
     else if (document.activeElement === $('q')) $('body').focus();
   }
@@ -529,29 +674,39 @@ $('doc').addEventListener('click', (e) => {
   }
 });
 
-/* 图片粘贴 / 拖入 */
-async function uploadImage(file) {
-  const data = await new Promise((res) => {
-    const fr = new FileReader();
-    fr.onload = () => res(fr.result);
-    fr.readAsDataURL(file);
-  });
-  const r = await api('/api/upload', { name: file.name, data });
-  insertText(`\n\n![${file.name.replace(/\.[^.]+$/, '')}](${r.url})\n\n`);
-  toast('图片已插入');
-}
+// 粘贴图片（截图直接 Ctrl+V）
 $('body').addEventListener('paste', async (e) => {
-  const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
-  if (!item) return;
+  const items = [...(e.clipboardData?.items || [])];
+  const files = items.filter((i) => i.kind === 'file' && i.type.startsWith('image/')).map((i) => i.getAsFile()).filter(Boolean);
+  if (!files.length) return;
   e.preventDefault();
-  await uploadImage(item.getAsFile());
+  await uploadImages(files);
 });
-$('body').addEventListener('dragover', (e) => e.preventDefault());
-$('body').addEventListener('drop', async (e) => {
-  const file = e.dataTransfer?.files?.[0];
-  if (!file || !file.type.startsWith('image/')) return;
-  e.preventDefault();
-  await uploadImage(file);
+
+// 拖入图片：编辑器、预览区都接住，别让浏览器直接打开图片
+['body', 'doc', 'pv'].forEach((id) => {
+  const el = $(id);
+  if (!el) return;
+  el.addEventListener('dragover', (e) => {
+    if ([...(e.dataTransfer?.items || [])].some((i) => i.kind === 'file')) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  });
+  el.addEventListener('drop', async (e) => {
+    const files = [...(e.dataTransfer?.files || [])];
+    if (!files.some(isImage)) return;
+    e.preventDefault();
+    if (el !== $('body')) $('body').focus();
+    await uploadImages(files);
+  });
+});
+
+// 工具条里的图片按钮 → 选本地文件
+$('picker').addEventListener('change', async () => {
+  const files = [...($('picker').files || [])];
+  $('picker').value = '';
+  if (files.length) await uploadImages(files);
 });
 
 /* ---------- 启动 ---------- */
@@ -562,7 +717,7 @@ setPreview(localStorage.getItem('pv') !== '0');
 setFocus(new URLSearchParams(location.search).get('focus') === '1' || localStorage.getItem('focus') === '1');
 setSave('', '未选择文章');
 
-loadPosts()
+Promise.all([api('/api/site').then(applySite).catch(() => {}), loadPosts()])
   .then(async () => {
     refreshGit();
     if (state.posts.length) await openPost(state.posts[0].p);

@@ -46,14 +46,15 @@
     }
   }
 
-  // 侧栏年份折叠（记住状态）
-  document.querySelectorAll('.group').forEach((g, i) => {
-    if (localStorage.getItem('closed-' + i) === '1') g.classList.add('closed');
+  // 侧栏折叠：年 → 月 两级，各自记住状态（按 2026 / 2026-11 这样的 key，新增月份不会串位）
+  document.querySelectorAll('.group').forEach((g) => {
+    const key = 'fold:' + (g.dataset.g || '');
+    if (localStorage.getItem(key) === '1') g.classList.add('closed');
     const head = g.querySelector('.group-head');
     if (!head) return;
     head.addEventListener('click', () => {
       g.classList.toggle('closed');
-      localStorage.setItem('closed-' + i, g.classList.contains('closed') ? '1' : '0');
+      localStorage.setItem(key, g.classList.contains('closed') ? '1' : '0');
     });
   });
 

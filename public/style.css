@@ -84,12 +84,19 @@ svg{stroke-width:1.7}
   cursor:pointer;text-align:left;transition:color .14s,background .14s;
 }
 .group-head:hover{background:var(--hover);color:var(--ink-2)}
+.year-group>.group-head{color:var(--ink-2);font-weight:600;letter-spacing:.08em}
+.year-group>.group-head:hover{color:var(--ink)}
+.cnt{font:10px/1 var(--mono);letter-spacing:0;color:var(--faint);opacity:.75;margin-left:auto;font-weight:400}
+.month-list{padding-left:4px}
+.month-head{padding:4px 10px 4px 14px;font-size:10.5px;letter-spacing:.06em;color:var(--faint)}
+.month-head:hover{color:var(--ink-2)}
 .chev{font-size:9px;opacity:.8;transition:transform .16s ease}
 .group.closed .chev{transform:rotate(-90deg)}
 .group.closed .items{display:none}
+.group.closed .month-list{display:none}
 .items{list-style:none;margin:0;padding:1px 0 8px}
 .item{
-  display:block;padding:5px 10px 5px 21px;border-radius:6px;font-size:12.5px;line-height:1.5;
+  display:block;padding:5px 10px 5px 29px;border-radius:6px;font-size:12.5px;line-height:1.5;
   color:var(--ink-2);border-left:2px solid transparent;transition:background .14s,color .14s;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
@@ -117,10 +124,6 @@ h1{font-size:32px;line-height:1.35;letter-spacing:-.015em;margin:0 0 12px;font-w
   color:var(--ink-2);background:var(--bg);transition:all .14s;
 }
 .tag:hover{border-color:color-mix(in srgb,var(--accent) 40%,var(--line));color:var(--accent);background:var(--accent-soft)}
-.draft-flag{
-  color:var(--accent);border:1px dashed color-mix(in srgb,var(--accent) 45%,var(--line));
-  border-radius:5px;padding:1px 6px;font-size:11px;background:var(--accent-soft);
-}
 
 /* ---------- 正文 ---------- */
 .content{margin-top:34px;font-size:16.5px;line-height:1.92;color:var(--ink)}
@@ -167,6 +170,12 @@ h1{font-size:32px;line-height:1.35;letter-spacing:-.015em;margin:0 0 12px;font-w
   padding:0 0 9px;border-bottom:1px solid var(--line);text-transform:uppercase;
 }
 .year-label span{letter-spacing:0;font-family:var(--mono);opacity:.9}
+/* 年份底下的月份小标；没有文章的月份不渲染，所以这里只会出现有内容的月份 */
+.month-label{
+  display:flex;align-items:baseline;gap:8px;padding:16px 12px 0;
+  font-size:10.5px;letter-spacing:.1em;color:var(--faint);
+}
+.month-label span{font:10px/1 var(--mono);letter-spacing:0;opacity:.7}
 .entry{
   position:relative;display:block;padding:15px 14px 15px 12px;border-radius:9px;
   transition:background .16s;
@@ -187,7 +196,7 @@ h1{font-size:32px;line-height:1.35;letter-spacing:-.015em;margin:0 0 12px;font-w
 .lead{color:var(--muted);font-size:13.5px}
 
 /* ---------- 归档 / 标签 ---------- */
-.archive{list-style:none;margin:8px 0 26px;padding:0}
+.archive{list-style:none;margin:4px 0 16px;padding:0}
 .archive li+li{border-top:1px solid var(--line-soft)}
 .archive a{display:flex;gap:16px;padding:10px 6px;align-items:baseline;border-radius:7px;transition:background .14s}
 .archive a:hover{background:var(--hover)}

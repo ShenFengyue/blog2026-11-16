@@ -140,29 +140,51 @@ for (const file of await walk(path.join(CONTENT, 'posts'))) {
   const { data, body } = parseFront(raw);
   const slug = path.basename(file, '.md');
   const s = await stat(file);
+  const localMtime = new Date(s.mtime.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
   posts.push({
     slug,
     title: data.title || slug,
-    date: (data.date || s.mtime.toISOString().slice(0, 10)).toString().slice(0, 10),
-    updated: (data.updated || data.date || '').toString().slice(0, 10),
+    date: (data.date || localMtime).toString().slice(0, 10),
+    // 同一天发布多篇时用可选的 time（HH:MM）决定先后；不写就按文件名排
+    time: /^\d{1,2}:\d{2}$/.test((data.time || '').toString().trim()) ? (data.time + '').trim().padStart(5, '0') : '',
+    updated: (data.updated || data.date || localMtime).toString().slice(0, 10),
     tags: Array.isArray(data.tags) ? data.tags : [],
     summary: data.summary || '',
-    draft: data.draft === true,
     body,
     minutes: Math.max(1, Math.round(plain(body).length / 350))
   });
 }
 
-posts.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.slug.localeCompare(b.slug)));
+// 时间倒序：date → time → slug
+const stamp = (p) => `${p.date} ${p.time || '00:00'}`;
+posts.sort((a, b) => {
+  const ka = stamp(a);
+  const kb = stamp(b);
+  if (ka !== kb) return ka < kb ? 1 : -1;
+  return a.slug.localeCompare(b.slug);
+});
 
-const published = posts.filter((p) => !p.draft);
-const groups = new Map();
+const published = posts;
+
+// 年份 → 月份 → 文章。只收录真正有文章的月份，空月份不出现；
+// 每次构建都重新计算，所以后来补进某个空月份的文章会立刻显示出来。
+const tree = [];
+const yearsMap = new Map();
 for (const p of published) {
   const y = p.date.slice(0, 4);
-  if (!groups.has(y)) groups.set(y, []);
-  groups.get(y).push(p);
+  const m = p.date.slice(5, 7);
+  if (!yearsMap.has(y)) yearsMap.set(y, new Map());
+  const ms = yearsMap.get(y);
+  if (!ms.has(m)) ms.set(m, []);
+  ms.get(m).push(p);
 }
-const years = [...groups.keys()].sort((a, b) => b.localeCompare(a));
+for (const y of [...yearsMap.keys()].sort((a, b) => b.localeCompare(a))) {
+  const ms = yearsMap.get(y);
+  const months = [...ms.keys()]
+    .sort((a, b) => b.localeCompare(a))
+    .map((m) => ({ key: `${y}-${m}`, label: `${Number(m)}月`, posts: ms.get(m) }));
+  tree.push({ y, months, total: months.reduce((n, x) => n + x.posts.length, 0) });
+}
 
 const excerpt = (p) => p.summary || plain(p.body).slice(0, 90);
 
@@ -171,20 +193,29 @@ const excerpt = (p) => p.summary || plain(p.body).slice(0, 90);
 const sidebar = (active) => `
 <aside class="sidebar" id="sidebar">
   <div class="side-title">全部文章 · ${published.length}</div>
-  ${years
+  ${tree
     .map(
-      (y) => `
-  <div class="group">
-    <button class="group-head" type="button"><span class="chev">▾</span>${y}</button>
-    <ul class="items">
-      ${groups
-        .get(y)
+      (t) => `
+  <div class="group year-group" data-g="${t.y}">
+    <button class="group-head" type="button"><span class="chev">▾</span>${t.y}<span class="cnt">${t.total}</span></button>
+    <div class="month-list">
+      ${t.months
         .map(
-          (p) =>
-            `<li><a class="item${p.slug === active ? ' active' : ''}" href="/posts/${encodeURIComponent(p.slug)}/">${esc(p.title)}</a></li>`
+          (mm) => `
+      <div class="group month-group" data-g="${mm.key}">
+        <button class="group-head month-head" type="button"><span class="chev">▾</span>${mm.label}<span class="cnt">${mm.posts.length}</span></button>
+        <ul class="items">
+          ${mm.posts
+            .map(
+              (p) =>
+                `<li><a class="item${p.slug === active ? ' active' : ''}" href="/posts/${encodeURIComponent(p.slug)}/">${esc(p.title)}</a></li>`
+            )
+            .join('\n          ')}
+        </ul>
+      </div>`
         )
-        .join('\n      ')}
-    </ul>
+        .join('\n')}
+    </div>
   </div>`
     )
     .join('\n')}
@@ -223,26 +254,29 @@ ${toc ? `<aside class="toc"><div class="toc-title">本页目录</div>${toc}</asi
 
 /* ---------------- 首页 ---------------- */
 
+const entry = (p) => `
+    <a class="entry" href="/posts/${encodeURIComponent(p.slug)}/">
+      <div class="entry-title">${esc(p.title)}</div>
+      <div class="entry-meta">${p.date} · ${p.minutes} 分钟${p.tags.length ? ' · ' + p.tags.map(esc).join(' / ') : ''}</div>
+      <div class="entry-sum">${esc(excerpt(p))}</div>
+    </a>`;
+
 const indexBody = `
 <div class="doc">
   <div class="hero">
     <h1>${esc(site.title)}</h1>
     <p class="tagline">${esc(site.tagline || '')}</p>
   </div>
-  ${years
+  ${tree
     .map(
-      (y) => `
+      (t) => `
   <section class="year">
-    <div class="year-label">${y}<span>${groups.get(y).length} 篇</span></div>
-    ${groups
-      .get(y)
+    <div class="year-label">${t.y}<span>${t.total} 篇</span></div>
+    ${t.months
       .map(
-        (p) => `
-    <a class="entry" href="/posts/${encodeURIComponent(p.slug)}/">
-      <div class="entry-title">${esc(p.title)}</div>
-      <div class="entry-meta">${p.date} · ${p.minutes} 分钟${p.tags.length ? ' · ' + p.tags.map(esc).join(' / ') : ''}</div>
-      <div class="entry-sum">${esc(excerpt(p))}</div>
-    </a>`
+        (mm) => `
+    <div class="month-label">${mm.label}<span>${mm.posts.length}</span></div>
+    ${mm.posts.map(entry).join('\n')}`
       )
       .join('\n')}
   </section>`
@@ -270,7 +304,6 @@ const renderPost = (p, idx) => {
     <time datetime="${p.date}">${p.date}</time>
     <span>约 ${p.minutes} 分钟</span>
     ${p.tags.map((t) => `<a class="tag" href="/tags/#${encodeURIComponent(t)}">${esc(t)}</a>`).join('')}
-    ${p.draft ? '<span class="draft-flag">草稿</span>' : ''}
   </div>
   <div class="content">${html}</div>
   <nav class="pager">
@@ -295,19 +328,24 @@ const archiveBody = `
   <div class="crumbs"><a href="/">博客</a><span class="sep">/</span>归档</div>
   <h1>归档</h1>
   <p class="lead">共 ${published.length} 篇。</p>
-  ${years
+  ${tree
     .map(
-      (y) => `
-  <div class="year-label">${y}<span>${groups.get(y).length} 篇</span></div>
+      (t) => `
+  <div class="year-label">${t.y}<span>${t.total} 篇</span></div>
+  ${t.months
+    .map(
+      (mm) => `
+  <div class="month-label">${mm.label}<span>${mm.posts.length}</span></div>
   <ul class="archive">
-    ${groups
-      .get(y)
+    ${mm.posts
       .map(
         (p) =>
-          `<li><a href="/posts/${encodeURIComponent(p.slug)}/"><time>${p.date.slice(5)}</time><span>${esc(p.title)}</span></a></li>`
+          `<li><a href="/posts/${encodeURIComponent(p.slug)}/"><time datetime="${p.date}">${p.date.slice(8)}</time><span>${esc(p.title)}</span></a></li>`
       )
       .join('\n    ')}
   </ul>`
+    )
+    .join('\n')}`
     )
     .join('\n')}
 </div>`;
