@@ -9,6 +9,22 @@ const PUBLIC = path.join(ROOT, 'public');
 
 const site = JSON.parse(await readFile(path.join(ROOT, 'site.json'), 'utf8'));
 
+/* ---------------- 版式 ---------------- */
+// site.json 里的 theme 决定用哪套版式；管理器右上角的齿轮 → 站点信息 里可以一键切换
+const THEME_KEYS = ['classic', 'a', 'b', 'c', 'd'];
+const THEME = THEME_KEYS.includes(String(site.theme || '').toLowerCase())
+  ? String(site.theme).toLowerCase()
+  : 'classic';
+const SHEET = THEME === 'classic' ? '/style.css' : `/themes/${THEME}.css`;
+const NAV_LINKS = [
+  ['/archive/', '归档'],
+  ['/tags/', '标签'],
+  ['/about/', '关于'],
+  ['/search/', '搜索'],
+  ['/feed.xml', 'RSS']
+];
+const navHTML = NAV_LINKS.map(([u, t]) => `<a href="${u}">${t}</a>`).join('');
+
 /* ---------------- 解析 ---------------- */
 
 function parseFront(raw0) {
@@ -36,7 +52,7 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 function inline(src) {
   let s = esc(src);
   s = s.replace(/`([^`]+)`/g, (_, c) => `<code>${c}</code>`);
-  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, a, u) => `<img src="${u}" alt="${a}" loading="lazy">`);
+  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, a, u) => `<img src="${u}" alt="${a}">`);
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, t, u) => `<a href="${u}">${t}</a>`);
   s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
@@ -187,9 +203,13 @@ for (const y of [...yearsMap.keys()].sort((a, b) => b.localeCompare(a))) {
 }
 
 const excerpt = (p) => p.summary || plain(p.body).slice(0, 90);
+const postURL = (p) => `/posts/${encodeURIComponent(p.slug)}/`;
+const YEARS = tree.map((t) => t.y);
+const SPAN = `${YEARS[YEARS.length - 1]} — ${YEARS[0]}`;
 
 /* ---------------- 页面骨架 ---------------- */
 
+// classic 版式的侧栏（年 → 月两级，可折叠）
 const sidebar = (active) => `
 <aside class="sidebar" id="sidebar">
   <div class="side-title">全部文章 · ${published.length}</div>
@@ -205,12 +225,7 @@ const sidebar = (active) => `
       <div class="group month-group" data-g="${mm.key}">
         <button class="group-head month-head" type="button"><span class="chev">▾</span>${mm.label}<span class="cnt">${mm.posts.length}</span></button>
         <ul class="items">
-          ${mm.posts
-            .map(
-              (p) =>
-                `<li><a class="item${p.slug === active ? ' active' : ''}" href="/posts/${encodeURIComponent(p.slug)}/">${esc(p.title)}</a></li>`
-            )
-            .join('\n          ')}
+          ${mm.posts.map((p) => `<li><a class="item${p.slug === active ? ' active' : ''}" href="${postURL(p)}">${esc(p.title)}</a></li>`).join('\n          ')}
         </ul>
       </div>`
         )
@@ -221,7 +236,26 @@ const sidebar = (active) => `
     .join('\n')}
 </aside>`;
 
-const shell = ({ title, description = '', body, active = '', toc = '', prefix = '' }) => `<!doctype html>
+// C 版式的左栏：整面墙刻痕
+const rail = () => `
+<nav class="rail">
+  <a class="brand" href="/">${esc(site.title)}</a>
+  <div class="where">${esc(site.author || '')} · ${published.length} 篇</div>
+  <div class="rail-nav">${navHTML}</div>
+  ${tree
+    .map(
+      (t) => `<div class="ry">${t.y}</div>${t.months
+        .map(
+          (mm) => `<div class="rm">${mm.label}</div>${mm.posts
+            .map((p) => `<a class="rp" href="${postURL(p)}">${esc(p.title)}</a>`)
+            .join('')}`
+        )
+        .join('')}`
+    )
+    .join('')}
+</nav>`;
+
+const head = ({ title, description = '' }) => `<!doctype html>
 <html lang="zh-CN" data-theme="light">
 <head>
 <meta charset="utf-8">
@@ -230,10 +264,15 @@ const shell = ({ title, description = '', body, active = '', toc = '', prefix = 
 <meta name="description" content="${esc(description)}">
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(description)}">
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="${SHEET}">
 <link rel="alternate" type="application/rss+xml" title="${esc(site.title)} · RSS" href="/feed.xml">
-</head>
-<body>
+</head>`;
+
+const shell = ({ title, description = '', body, active = '', toc = '' }) => {
+  const h = head({ title, description });
+
+  if (THEME === 'classic') {
+    return `${h}<body>
 <div class="progress" id="progress"></div>
 <header class="topbar">
   <a class="brand" href="/"><span class="logo">${esc(site.author || site.title.slice(0, 1))}</span>${esc(site.title)}</a>
@@ -251,17 +290,43 @@ ${toc ? `<aside class="toc"><div class="toc-title">本页目录</div>${toc}</asi
 <script src="/main.js"></script>
 </body>
 </html>`;
+  }
+
+  if (THEME === 'c') {
+    return `${h}<body>
+<div class="shell">
+  <div class="railcol">${rail()}</div>
+  <div class="main">
+    <div class="wrap mast"><span class="stamp">${SPAN}</span><nav class="nav">${navHTML}</nav></div>
+    ${body}
+  </div>
+</div>
+<script src="/main.js"></script>
+</body>
+</html>`;
+  }
+
+  return `${h}<body>
+<header class="top"><div class="wrap top-in">
+  <a class="brand" href="/">${esc(site.title)}</a>
+  <nav class="nav">${navHTML}</nav>
+</div></header>
+<main>${body}</main>
+<script src="/main.js"></script>
+</body>
+</html>`;
+};
 
 /* ---------------- 首页 ---------------- */
 
-const entry = (p) => `
-    <a class="entry" href="/posts/${encodeURIComponent(p.slug)}/">
+const entryClassic = (p) => `
+    <a class="entry" href="${postURL(p)}">
       <div class="entry-title">${esc(p.title)}</div>
       <div class="entry-meta">${p.date} · ${p.minutes} 分钟${p.tags.length ? ' · ' + p.tags.map(esc).join(' / ') : ''}</div>
       <div class="entry-sum">${esc(excerpt(p))}</div>
     </a>`;
 
-const indexBody = `
+const indexClassic = `
 <div class="doc">
   <div class="hero">
     <h1>${esc(site.title)}</h1>
@@ -275,8 +340,8 @@ const indexBody = `
     ${t.months
       .map(
         (mm) => `
-    <div class="month-label">${mm.label}<span>${mm.posts.length}</span></div>
-    ${mm.posts.map(entry).join('\n')}`
+    <div class="month-label">${mm.label}<span>${mm.posts.length} 篇</span></div>
+    ${mm.posts.map(entryClassic).join('\n')}`
       )
       .join('\n')}
   </section>`
@@ -285,7 +350,125 @@ const indexBody = `
   <p class="foot-note">共 ${published.length} 篇 · <a href="/archive/">归档</a> · <a href="/tags/">标签</a> · <a href="/about/">关于</a> · <a href="/feed.xml">RSS</a></p>
 </div>`;
 
+// A 廊：一条长廊，年份是柱、月份是刻度、文章是窗洞
+const indexA = `
+<section class="wrap hero">
+  <div><h1>${esc(site.title)}</h1><p class="tagline">${esc(site.tagline || '')}</p></div>
+  <div class="hero-side">${published.length} 篇<br>${SPAN}<br>${esc(site.author || '')}</div>
+</section>
+<div class="wrap">
+${tree
+  .map(
+    (t) => `<section class="year">
+  <div class="year-head"><span class="y">${t.y}</span><span class="count">${t.total} 篇 · ${t.months.length} 个月</span></div>
+  ${t.months
+    .map(
+      (mm) => `<div class="month-label">${mm.label}</div>${mm.posts
+        .map(
+          (p) => `<a class="row" href="${postURL(p)}">
+    <span class="date">${p.date.slice(5).replace('-', '.')}</span>
+    <span class="title">${esc(p.title)}</span>
+    <span class="sum">${esc(excerpt(p))}</span>
+  </a>`
+        )
+        .join('')}`
+    )
+    .join('')}
+</section>`
+  )
+  .join('')}
+</div>
+<div class="wrap"><footer class="foot"><span>© ${esc(site.author || '')}</span><span>${esc(site.url || '')}</span></footer></div>`;
+
+// B 水庭：大留白 + 一条水面带承载最近三篇 + 两栏年份
+const latest3 = published.slice(0, 3);
+const indexB = `
+<section class="wrap hero"><h1>${esc(site.title)}</h1><p class="tagline">${esc(site.tagline || '')}</p></section>
+<section class="water"><div class="wrap water-in">
+  <div class="lab">最近 · RECENT</div>
+  <div class="stones">${latest3
+    .map((p) => `<a class="stone" href="${postURL(p)}"><div class="t">${esc(p.title)}</div><div class="d">${p.date}</div></a>`)
+    .join('')}</div>
+</div></section>
+<div class="wrap"><div class="archive2">
+${tree
+  .map(
+    (t) => `<div class="yblock">
+  <div class="y">${t.y}</div>
+  <div class="cnt">${t.total} POSTS · ${t.months.length} MONTHS</div>
+  ${t.months
+    .map(
+      (mm) => `<div class="m">${mm.label}</div>${mm.posts
+        .map((p) => `<a class="entry" href="${postURL(p)}"><div class="t">${esc(p.title)}</div><div class="d">${p.date}</div></a>`)
+        .join('')}`
+    )
+    .join('')}
+</div>`
+  )
+  .join('')}
+</div></div>
+<div class="wrap"><footer class="foot"><span>${esc(site.author || '')} · ${esc(site.tagline || '')}</span><span>${SPAN}</span></footer></div>`;
+
+// C 红土墙：左栏刻痕，主区放大字
+const indexC = `
+<div class="wrap">
+  <section class="hero"><h1>${esc(site.title)}</h1><p class="tag">${esc(site.tagline || '')}</p><div class="wire"></div></section>
+  ${tree
+    .map(
+      (t) => t.months
+        .map(
+          (mm) => `<div class="mlab">${t.y} · ${mm.label}</div>${mm.posts
+            .map(
+              (p) => `<a class="mrow" href="${postURL(p)}"><div><div class="t">${esc(p.title)}</div><div class="s">${esc(excerpt(p))}</div></div><div class="d">${p.date.slice(5).replace('-', '.')}</div></a>`
+            )
+            .join('')}`
+        )
+        .join('')
+    )
+    .join('')}
+  <footer class="foot"><span>${esc(site.author || '')}</span><span>${SPAN}</span></footer>
+</div>`;
+
+// D 格栅：12 列障子，每格一篇文章
+const indexD = `
+<section class="wrap intro"><div><h1>${esc(site.title)}</h1><p class="tag">${esc(site.tagline || '')}</p></div>
+<div class="legend">${published.length} 篇 · ${tree.length} 年 · 12 列格栅<br>移开鼠标看全貌，指向一格看细节</div></section>
+<div class="grid" id="grid">
+${tree
+  .map((t) => {
+    const cells = t.months
+      .map((mm) =>
+        mm.posts
+          .map((p) => `<a class="cell" href="${postURL(p)}"><span class="d">${p.date.slice(5).replace('-', '.')}</span><span class="t">${esc(p.title)}</span></a>`)
+          .join('')
+      )
+      .join('');
+    const pad = (12 - (t.total % 12)) % 12;
+    return `<div class="yband"><span class="y">${t.y}</span><span class="c">${t.total} POSTS</span></div>${cells}${'<span class="cell blank"></span>'.repeat(pad)}`;
+  })
+  .join('')}
+</div>
+<div class="wrap"><footer class="foot"><span>${esc(site.author || '')}</span><span>${SPAN}</span></footer></div>`;
+
+const indexBody =
+  THEME === 'a' ? indexA : THEME === 'b' ? indexB : THEME === 'c' ? indexC : THEME === 'd' ? indexD : indexClassic;
+
 /* ---------------- 文章页 ---------------- */
+
+const crumbsFor = (p) =>
+  `<div class="crumbs"><a href="/">博客</a><span class="sep">/</span>${p.date.slice(0, 4)}<span class="sep">/</span>${esc(p.title)}</div>`;
+
+const metaFor = (p) =>
+  `<div class="meta"><time datetime="${p.date}">${p.date}</time><span>约 ${p.minutes} 分钟</span>${
+    p.tags.length ? p.tags.map((t) => `<a class="tag" href="/tags/#${encodeURIComponent(t)}">${esc(t)}</a>`).join('') : '<span class="dim">未分类</span>'
+  }</div>`;
+
+const pagerFor = (newer, older) =>
+  `<nav class="pager">${
+    newer ? `<a class="card" href="${postURL(newer)}"><div class="dir">← 上一篇</div><div class="t">${esc(newer.title)}</div></a>` : '<span></span>'
+  }${
+    older ? `<a class="card next" href="${postURL(older)}"><div class="dir">下一篇 →</div><div class="t">${esc(older.title)}</div></a>` : '<span></span>'
+  }</nav>`;
 
 const renderPost = (p, idx) => {
   const { html, headings } = renderMarkdown(p.body);
@@ -296,28 +479,74 @@ const renderPost = (p, idx) => {
     .map((h) => `<a href="#${h.id}">${esc(h.text)}</a>`)
     .join('');
 
-  const body = `
-<article class="doc">
-  <div class="crumbs"><a href="/">博客</a><span class="sep">/</span>${p.date.slice(0, 4)}<span class="sep">/</span>${esc(p.title)}</div>
+  let body = '';
+  let tocAside = toc;
+
+  if (THEME === 'a') {
+    tocAside = '';
+    body = `
+<div class="wrap post-wrap"><div class="pgrid">
+  <aside class="rail">${toc ? `<div class="lab">目录</div>${toc}` : '<div class="lab">目录</div><span class="empty">本文没有小节</span>'}<a class="back" href="/archive/">← 全部文章</a></aside>
+  <article class="article">
+    <div class="crumbs">${p.date.slice(0, 4)} / ${Number(p.date.slice(5, 7))}月</div>
+    <h1>${esc(p.title)}</h1>
+    ${metaFor(p)}
+    <div class="content">${html}</div>
+    ${pagerFor(newer, older)}
+  </article>
+</div></div>`;
+  } else if (THEME === 'b') {
+    tocAside = '';
+    body = `
+<div class="wrap post"><div class="post-in">
+  <div class="vprog" id="vprog"><i></i></div>
+  <div class="crumbs">${p.date.slice(0, 4)} · ${Number(p.date.slice(5, 7))}月</div>
   <h1>${esc(p.title)}</h1>
-  <div class="meta">
-    <time datetime="${p.date}">${p.date}</time>
-    <span>约 ${p.minutes} 分钟</span>
-    ${p.tags.map((t) => `<a class="tag" href="/tags/#${encodeURIComponent(t)}">${esc(t)}</a>`).join('')}
-  </div>
+  ${metaFor(p)}
   <div class="content">${html}</div>
-  <nav class="pager">
-    ${newer ? `<a class="card" href="/posts/${encodeURIComponent(newer.slug)}/"><div class="dir">← 上一篇</div><div class="t">${esc(newer.title)}</div></a>` : '<span></span>'}
-    ${older ? `<a class="card next" href="/posts/${encodeURIComponent(older.slug)}/"><div class="dir">下一篇 →</div><div class="t">${esc(older.title)}</div></a>` : '<span></span>'}
-  </nav>
+  ${pagerFor(newer, older)}
+</div></div>`;
+  } else if (THEME === 'c') {
+    tocAside = '';
+    body = `
+<div class="postgrid">
+  <div></div>
+  <article class="post">
+    <div class="crumbs">${p.date.slice(0, 4)} · ${Number(p.date.slice(5, 7))}月</div>
+    <h1>${esc(p.title)}</h1>
+    ${metaFor(p)}
+    <div class="content">${html}</div>
+    ${pagerFor(newer, older)}
+  </article>
+  <aside class="toc"><div class="toc-title">目录</div>${toc || '<span class="empty">本文没有小节</span>'}<a class="back" href="/archive/">← 全部文章</a></aside>
+</div>`;
+  } else if (THEME === 'd') {
+    tocAside = '';
+    body = `
+<article class="post">
+  <div class="crumbs">${p.date.slice(0, 4)} · ${Number(p.date.slice(5, 7))}月</div>
+  <h1>${esc(p.title)}</h1>
+  ${metaFor(p)}
+  <div class="content">${html}</div>
+  ${pagerFor(newer, older)}
 </article>`;
+  } else {
+    body = `
+<article class="doc">
+  ${crumbsFor(p)}
+  <h1>${esc(p.title)}</h1>
+  ${metaFor(p)}
+  <div class="content">${html}</div>
+  ${pagerFor(newer, older)}
+</article>`;
+  }
 
   return shell({
     title: `${p.title} · ${site.title}`,
     description: excerpt(p),
     body,
     active: p.slug,
-    toc
+    toc: tocAside
   });
 };
 
@@ -335,13 +564,10 @@ const archiveBody = `
   ${t.months
     .map(
       (mm) => `
-  <div class="month-label">${mm.label}<span>${mm.posts.length}</span></div>
+  <div class="month-label">${mm.label}<span>${mm.posts.length} 篇</span></div>
   <ul class="archive">
     ${mm.posts
-      .map(
-        (p) =>
-          `<li><a href="/posts/${encodeURIComponent(p.slug)}/"><time datetime="${p.date}">${p.date.slice(8)}</time><span>${esc(p.title)}</span></a></li>`
-      )
+      .map((p) => `<li><a href="${postURL(p)}"><time datetime="${p.date}">${p.date.slice(8)}</time><span>${esc(p.title)}</span></a></li>`)
       .join('\n    ')}
   </ul>`
     )
@@ -369,7 +595,7 @@ const tagsBody = `
   <section class="tag-block" id="${encodeURIComponent(t)}">
     <div class="year-label">${esc(t)}<span>${list.length} 篇</span></div>
     <ul class="archive">
-      ${list.map((p) => `<li><a href="/posts/${encodeURIComponent(p.slug)}/"><time>${p.date}</time><span>${esc(p.title)}</span></a></li>`).join('\n      ')}
+      ${list.map((p) => `<li><a href="${postURL(p)}"><time>${p.date}</time><span>${esc(p.title)}</span></a></li>`).join('\n      ')}
     </ul>
   </section>`
           )
@@ -427,7 +653,7 @@ published.forEach((p, idx) => {
 await write(
   'search.json',
   JSON.stringify(
-    published.map((p) => ({ t: p.title, u: `/posts/${encodeURIComponent(p.slug)}/`, d: p.date, x: plain(p.body).slice(0, 2000) })),
+    published.map((p) => ({ t: p.title, u: postURL(p), d: p.date, x: plain(p.body).slice(0, 2000) })),
     null,
     0
   )
@@ -443,7 +669,7 @@ await write(
 ${published
   .slice(0, 20)
   .map(
-    (p) => `<item><title>${esc(p.title)}</title><link>${base}/posts/${encodeURIComponent(p.slug)}/</link><guid>${base}/posts/${encodeURIComponent(p.slug)}/</guid><pubDate>${new Date(p.date).toUTCString()}</pubDate><description>${esc(excerpt(p))}</description></item>`
+    (p) => `<item><title>${esc(p.title)}</title><link>${base}${postURL(p)}</link><guid>${base}${postURL(p)}</guid><pubDate>${new Date(p.date).toUTCString()}</pubDate><description>${esc(excerpt(p))}</description></item>`
   )
   .join('\n')}
 </channel></rss>`
@@ -457,10 +683,10 @@ await write(
 <url><loc>${base}/archive/</loc></url>
 <url><loc>${base}/tags/</loc></url>
 <url><loc>${base}/about/</loc></url>
-${published.map((p) => `<url><loc>${base}/posts/${encodeURIComponent(p.slug)}/</loc><lastmod>${p.updated || p.date}</lastmod></url>`).join('\n')}
+${published.map((p) => `<url><loc>${base}${postURL(p)}</loc><lastmod>${p.updated || p.date}</lastmod></url>`).join('\n')}
 </urlset>`
 );
 
 await cp(PUBLIC, DIST, { recursive: true });
 
-console.log(`构建完成：${published.length} 篇文章 → dist/`);
+console.log(`构建完成：${published.length} 篇文章 → dist/ · 版式 ${THEME}`);

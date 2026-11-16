@@ -362,9 +362,41 @@ async function confirmDialog() {
 
 function applySite(site) {
   state.site = site;
+  state.theme = site.theme || 'classic';
   $('brand-mark').textContent = site.author || (site.title || '').slice(0, 1) || '申';
   $('brand-title').textContent = site.title || '我的博客';
   $('brand-sub').textContent = (site.url || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
+}
+
+const THEME_LABEL = { classic: '原版', a: 'A 廊', b: 'B 水庭', c: 'C 红土墙', d: 'D 格栅' };
+
+function markTheme(t) {
+  const cur = t || 'classic';
+  document.querySelectorAll('#s-themes button').forEach((b) => b.classList.toggle('on', b.dataset.t === cur));
+  state.theme = cur;
+}
+
+// 本地切版式：只写 site.json 并重建，不提交；要上线再点「保存并同步」
+async function switchTheme(t) {
+  if (!t || t === state.theme) return;
+  markTheme(t);
+  try {
+    const r = await api('/api/theme', { theme: t });
+    if (!r.built) {
+      toast('重建失败：' + (r.out || '').slice(0, 140), 7000);
+      return;
+    }
+    toast('已切换为「' + (THEME_LABEL[t] || t) + '」，本地已重建', 2600);
+    openPreview();
+  } catch (e) {
+    toast('切换失败：' + e.message, 5000);
+  }
+}
+
+// 用本地 /site/ 预览重建结果，复用同一个窗口
+function openPreview() {
+  const w = window.open('/site/', 'blogPreview');
+  if (w) w.focus();
 }
 
 function openSite() {
@@ -373,6 +405,7 @@ function openSite() {
   $('s-tagline').value = s.tagline || '';
   $('s-author').value = s.author || '';
   $('s-desc').value = s.description || '';
+  markTheme(s.theme);
   $('smask').classList.add('on');
   setTimeout(() => $('s-title').focus(), 60);
 }
@@ -389,7 +422,8 @@ async function saveSite() {
       title,
       tagline: $('s-tagline').value.trim(),
       author: $('s-author').value.trim(),
-      description: $('s-desc').value.trim()
+      description: $('s-desc').value.trim(),
+      theme: state.theme || 'classic'
     });
     applySite(r.site);
     closeSite();
@@ -569,6 +603,11 @@ $('mask').addEventListener('click', (e) => { if (e.target.id === 'mask') closeDi
 $('btn-site').onclick = openSite;
 $('s-cancel').onclick = closeSite;
 $('s-ok').onclick = saveSite;
+$('s-preview').onclick = openPreview;
+$('s-themes').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (b) switchTheme(b.dataset.t);
+});
 $('smask').addEventListener('click', (e) => { if (e.target.id === 'smask') closeSite(); });
 
 function setPreview(on) {

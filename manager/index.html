@@ -289,6 +289,17 @@
   .fld input:focus,.fld textarea:focus{border-color:color-mix(in srgb,var(--accent) 40%,var(--line));box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 8%,transparent)}
   .fld input::placeholder,.fld textarea::placeholder{color:var(--ink-4)}
 
+  /* 版式切换 */
+  .themerow{align-items:flex-start;margin-top:4px}
+  .themes{flex:1;min-width:0;display:flex;flex-wrap:wrap;gap:5px}
+  .themes button{
+    height:27px;padding:0 9px;border:1px solid var(--line);border-radius:7px;
+    background:var(--shell);font-size:11.5px;color:var(--ink-2);transition:all .14s;white-space:nowrap;
+  }
+  .themes button:hover{border-color:color-mix(in srgb,var(--accent) 42%,var(--line));color:var(--ink)}
+  .themes button.on{background:var(--ink);border-color:var(--ink);color:var(--paper);font-weight:600}
+  .dlg .hint{margin:2px 0 14px;font-size:11px;line-height:1.7;color:var(--ink-4);white-space:normal}
+
   .toast{
     position:fixed;left:50%;bottom:64px;transform:translate(-50%,8px);z-index:60;
     background:color-mix(in srgb,var(--ink) 92%,transparent);color:var(--paper);
@@ -443,7 +454,18 @@
     <label class="fld"><span>标语</span><input id="s-tagline" spellcheck="false" placeholder="move fast and break things"></label>
     <label class="fld"><span>作者</span><input id="s-author" spellcheck="false" placeholder="申（顶栏左上角方块里的字）"></label>
     <label class="fld"><span>简介</span><textarea id="s-desc" rows="2" spellcheck="false" placeholder="站点简介，用于搜索引擎与 RSS"></textarea></label>
+    <div class="fld themerow"><span>版式</span>
+      <div class="themes" id="s-themes">
+        <button type="button" data-t="classic">原版</button>
+        <button type="button" data-t="a">A 廊</button>
+        <button type="button" data-t="b">B 水庭</button>
+        <button type="button" data-t="c">C 红土墙</button>
+        <button type="button" data-t="d">D 格栅</button>
+      </div>
+    </div>
+    <p class="hint">点一下就地重建、不推送；「保存并同步」才会提交到 GitHub，云端几十秒后生效。</p>
     <div class="dlg-act">
+      <button class="ghost" id="s-preview" style="height:30px">预览站点</button>
       <button class="ghost" id="s-cancel" style="height:30px">取消</button>
       <button class="primary" id="s-ok" style="height:30px">保存并同步</button>
     </div>

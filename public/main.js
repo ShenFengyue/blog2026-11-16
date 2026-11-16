@@ -27,7 +27,7 @@
     });
   }
 
-  // 阅读进度
+  // 阅读进度（顶部横条：原版；竖线：B 水庭）
   const bar = document.getElementById('progress');
   const content = document.querySelector('.content');
   if (bar) {
@@ -44,6 +44,18 @@
       window.addEventListener('resize', upd);
       upd();
     }
+  }
+
+  const vfill = document.querySelector('#vprog i');
+  if (vfill) {
+    const upd = () => {
+      const total = document.documentElement.scrollHeight - window.innerHeight;
+      const p = total > 0 ? Math.min(1, Math.max(0, window.scrollY / total)) : 1;
+      vfill.style.height = (p * 100).toFixed(1) + '%';
+    };
+    document.addEventListener('scroll', upd, { passive: true });
+    window.addEventListener('resize', upd);
+    upd();
   }
 
   // 侧栏折叠：年 → 月 两级，各自记住状态（按 2026 / 2026-11 这样的 key，新增月份不会串位）

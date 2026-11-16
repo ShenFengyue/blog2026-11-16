@@ -1,0 +1,142 @@
+/* 版式 C · 红土墙（The Laterite Wall） */
+:root{
+  --bg:#1A1815; --panel:#201D19; --ink:#EDE8DF; --ink2:#B7AFA1; --ink3:#7C7265;
+  --line:rgba(237,232,223,.10); --line2:rgba(237,232,223,.06); --accent:#B4704C;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans SC","Microsoft YaHei UI",sans-serif;font-size:14px;line-height:1.8}
+a{color:inherit;text-decoration:none}
+img{max-width:100%;height:auto}
+::selection{background:#B4704C;color:#F4EFE6}
+.wrap{max-width:900px;padding:0 80px}
+
+.shell{display:grid;grid-template-columns:282px minmax(0,1fr)}
+
+/* 左栏：墙上的刻痕 */
+.railcol{background:var(--panel);border-right:1px solid var(--line)}
+.rail{display:block;padding:36px 26px 60px;position:sticky;top:0;height:100vh;overflow:auto;scrollbar-width:none}
+.rail::-webkit-scrollbar{display:none}
+.rail .brand{display:block;font-family:"Noto Serif SC",serif;font-size:13px;letter-spacing:.22em}
+.rail .where{margin-top:9px;font:9.5px/1.9 "Cascadia Mono",monospace;letter-spacing:.12em;color:var(--ink3)}
+.rail-nav{margin:18px 0 4px;display:flex;flex-wrap:wrap;gap:12px;font:9.5px/1.9 "Cascadia Mono",monospace;letter-spacing:.1em;color:var(--ink3)}
+.rail-nav a:hover{color:var(--accent)}
+.rail .rule{height:1px;background:var(--line);margin:20px 0 4px}
+.ry{font-family:"Noto Serif SC",serif;font-weight:300;font-size:34px;line-height:1;letter-spacing:.06em;color:#6E6156;margin:26px 0 0}
+.rm{display:flex;align-items:center;gap:10px;margin:18px 0 6px;font:9.5px/1 "Cascadia Mono",monospace;letter-spacing:.24em;color:var(--ink3)}
+.rm:after{content:"";flex:1;height:1px;background:var(--line)}
+.rp{display:block;font-size:12px;line-height:2.15;color:var(--ink2);padding:0 8px;margin-left:-8px;transition:.18s}
+.rp:hover{color:var(--ink);background:rgba(180,112,76,.13);box-shadow:inset 2px 0 0 var(--accent)}
+
+/* 主区 */
+.main{padding-bottom:90px;overflow:hidden}
+.main .wrap{margin:0 auto}
+.mast{display:flex;align-items:center;justify-content:space-between;height:84px;border-bottom:1px solid var(--line);
+      font:10px/1 "Cascadia Mono",monospace;letter-spacing:.18em;color:var(--ink3)}
+.mast .stamp{letter-spacing:.22em}
+.nav{display:none;gap:26px;font:10px/1 "Cascadia Mono",monospace;letter-spacing:.2em;color:var(--ink3)}
+.nav a:hover{color:var(--accent)}
+
+.hero{padding:88px 0 20px}
+.hero h1{margin:0;font-family:"Noto Serif SC",serif;font-size:46px;line-height:1.2;font-weight:300;letter-spacing:.03em}
+.tag{margin:20px 0 0;font-size:12.5px;color:var(--ink2);letter-spacing:.04em}
+.wire{margin-top:44px;height:1px;background:var(--line)}
+
+.mlab{font:9.5px/1 "Cascadia Mono",monospace;letter-spacing:.22em;color:var(--ink3);margin-top:44px}
+.mrow{display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:26px;align-items:baseline;padding:32px 0 30px;
+      border-bottom:1px solid var(--line2);transition:.2s}
+.mrow:hover{background:linear-gradient(90deg,rgba(180,112,76,.10),transparent 70%);box-shadow:inset 2px 0 0 var(--accent);padding-left:16px}
+.mrow .t{font-family:"Noto Serif SC",serif;font-size:23px;line-height:1.55;transition:color .2s}
+.mrow:hover .t{color:var(--accent)}
+.mrow .s{margin-top:8px;font-size:12px;line-height:1.85;color:var(--ink3);display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.mrow .d{text-align:right;font:10px/1.9 "Cascadia Mono",monospace;color:var(--ink3);letter-spacing:.08em}
+
+.foot{margin-top:70px;padding-top:26px;border-top:1px solid var(--line);display:flex;justify-content:space-between;
+      font:10px/1 "Cascadia Mono",monospace;color:var(--ink3);letter-spacing:.1em}
+
+/* 文章页 */
+.postgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,624px) minmax(0,1fr);gap:44px;padding:100px 0 0}
+.post .crumbs{font:10px/1 "Cascadia Mono",monospace;letter-spacing:.22em;color:var(--ink3);margin-bottom:30px}
+.crumbs .sep{margin:0 8px;opacity:.6}
+.post h1{margin:0;font-family:"Noto Serif SC",serif;font-size:38px;line-height:1.36;font-weight:300;letter-spacing:.01em}
+.meta{margin-top:22px;display:flex;flex-wrap:wrap;gap:16px;font:10px/1.9 "Cascadia Mono",monospace;color:var(--ink3);letter-spacing:.1em}
+.meta .tag{color:var(--accent)}
+.meta .dim{opacity:.6}
+
+.content{margin-top:48px;font-family:"Noto Sans SC",sans-serif;font-size:16.5px;line-height:1.98;color:#DCD5C8;font-weight:300}
+.content p{margin:0 0 1.6em}
+.content h2{font-family:"Noto Serif SC",serif;font-size:20px;font-weight:400;color:var(--ink);margin:2.3em 0 .9em;scroll-margin-top:80px}
+.content h3{font-family:"Noto Serif SC",serif;font-size:16px;font-weight:400;margin:2em 0 .5em;color:var(--ink);scroll-margin-top:80px}
+.content img{display:block;margin:44px 0;width:100%;opacity:.92}
+.content blockquote{margin:2.1em 0;padding:2px 0 2px 24px;border-left:1px solid var(--accent);color:var(--ink2);font-family:"Noto Serif SC",serif;font-size:15.5px}
+.content pre{position:relative;background:#141210;border:1px solid var(--line);margin:2em 0;overflow:auto}
+.content pre .code-head{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line);
+  font:9.5px/1 "Cascadia Mono",monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--ink3)}
+.content pre .copy{border:0;background:none;font:10px/1 inherit;color:var(--ink3);cursor:pointer}
+.content pre .copy:hover{color:var(--accent)}
+.content pre code{display:block;padding:16px 18px;font:12px/1.9 "Cascadia Mono",monospace;white-space:pre;color:#CFC7B8}
+.content code{font-family:"Cascadia Mono",monospace;font-size:.9em;background:#141210;padding:1px 5px;color:#CFC7B8}
+.content ul,.content ol{margin:0 0 1.6em;padding-left:22px}
+.content hr{border:0;border-top:1px solid var(--line);margin:2.6em 0}
+
+.toc{position:sticky;top:120px;padding-top:4px;align-self:start}
+.toc-title{font:9.5px/1 "Cascadia Mono",monospace;letter-spacing:.24em;color:var(--ink3);margin-bottom:18px}
+.toc a{display:block;font:10px/2.4 "Cascadia Mono",monospace;color:var(--ink3);padding-left:14px;position:relative}
+.toc a:before{content:"";position:absolute;left:0;top:9px;width:4px;height:4px;border-radius:50%;background:var(--ink3)}
+.toc a:hover,.toc a.on{color:var(--accent)}
+.toc a:hover:before,.toc a.on:before{background:var(--accent)}
+.toc .empty{display:block;font-size:11px;color:#5B544A;padding-left:14px}
+.toc .back{margin-top:22px;padding-left:0;line-height:1.8}
+.toc .back:before{display:none}
+
+.pager{display:flex;justify-content:space-between;gap:30px;margin-top:76px;padding-top:24px;border-top:1px solid var(--line)}
+.pager .card{max-width:48%;font:10px/1.8 "Cascadia Mono",monospace;color:var(--ink3);letter-spacing:.06em;transition:color .18s}
+.pager .card:hover{color:var(--accent)}
+.pager .dir{color:var(--ink3);margin-bottom:6px}
+.pager .t{font-family:"Noto Serif SC",serif;font-size:14px;color:var(--ink2)}
+.pager .next{text-align:right}
+
+/* 归档 / 标签 / 搜索 / 关于 / 404 */
+.doc{max-width:760px;margin:0 auto;padding:76px 80px 40px}
+.doc h1{margin:0 0 10px;font-family:"Noto Serif SC",serif;font-size:34px;font-weight:300;letter-spacing:.03em}
+.lead{font-size:12.5px;color:var(--ink3);margin:0 0 34px}
+.year-label{display:flex;align-items:baseline;gap:12px;padding:34px 0 10px;border-top:1px solid var(--line);
+  font-family:"Noto Serif SC",serif;font-size:26px;font-weight:300;letter-spacing:.06em}
+.year-label span{font:10px/1 "Cascadia Mono",monospace;color:var(--ink3);letter-spacing:.12em}
+.month-label{padding:20px 0 6px;font:9.5px/1 "Cascadia Mono",monospace;letter-spacing:.24em;color:var(--ink3)}
+.month-label span{margin-left:8px;opacity:.7}
+.archive{list-style:none;margin:0;padding:0}
+.archive li{border-bottom:1px solid var(--line2)}
+.archive li a{display:flex;gap:18px;align-items:baseline;padding:10px 0;font-size:13px;color:var(--ink2);transition:.18s}
+.archive li a:hover{color:var(--accent);padding-left:6px}
+.archive time{font:10px/1 "Cascadia Mono",monospace;color:var(--ink3);min-width:80px}
+.tag-block{margin-bottom:22px}
+.foot-note{margin-top:40px;font-size:12px;color:var(--ink3)}
+.foot-note a{color:var(--ink2)}
+.big-input{width:100%;margin:0 0 28px;padding:10px 0;border:0;border-bottom:1px solid var(--line);background:none;
+  font-family:"Noto Serif SC",serif;font-size:22px;color:var(--ink);outline:none}
+.results .entry{display:block;padding:16px 0;border-bottom:1px solid var(--line2)}
+.results .entry-title{font-family:"Noto Serif SC",serif;font-size:16px;transition:color .18s}
+.results .entry:hover .entry-title{color:var(--accent)}
+.results .entry-meta{font:10px/1.9 "Cascadia Mono",monospace;color:var(--ink3)}
+
+@media (max-width:1080px){
+  .shell{grid-template-columns:238px minmax(0,1fr)}
+  .postgrid{grid-template-columns:1fr;padding-top:60px}
+  .postgrid>div:first-child,.toc{display:none}
+}
+@media (max-width:860px){
+  .shell{grid-template-columns:1fr}
+  .railcol{display:none}
+  .nav{display:flex}
+  .wrap,.doc{padding-left:26px;padding-right:26px}
+  .hero h1{font-size:32px}
+  .mrow{grid-template-columns:1fr;gap:6px}
+  .mrow .s{display:none}
+  .post h1{font-size:27px}
+  .content{font-size:15.5px;line-height:1.95}
+  .pager{flex-direction:column;gap:16px}
+  .pager .card{max-width:none}
+  .pager .next{text-align:left}
+  .mast{height:60px}
+}

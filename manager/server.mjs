@@ -10,7 +10,9 @@ import path from 'node:path';
 const ROOT = path.join(import.meta.dirname, '..');
 const CONTENT = path.join(ROOT, 'content', 'posts');
 const PUBLIC_DIR = path.join(ROOT, 'public');
+const DIST_DIR = path.join(ROOT, 'dist');
 const SITE_FILE = path.join(ROOT, 'site.json');
+const THEME_KEYS = ['classic', 'a', 'b', 'c', 'd'];
 const PORT = Number(process.env.PORT || 5178);
 
 /* ---------- 工具 ---------- */
@@ -166,6 +168,9 @@ async function saveSite(patch) {
     tagline: String(patch.tagline ?? cur.tagline ?? '').trim().slice(0, 200),
     author: String(patch.author ?? cur.author ?? '').trim().slice(0, 20),
     description: String(patch.description ?? cur.description ?? '').trim().slice(0, 300),
+    theme: THEME_KEYS.includes(String(patch.theme ?? cur.theme ?? 'classic').toLowerCase())
+      ? String(patch.theme ?? cur.theme ?? 'classic').toLowerCase()
+      : 'classic',
     url: String(cur.url || '').trim()
   };
   if (!next.author) next.author = next.title.slice(0, 1);
@@ -174,6 +179,17 @@ async function saveSite(patch) {
   const build = await node(['scripts/build.mjs']);
   const sync = await queuePush(['site.json'], `site: 更新站点信息「${next.title}」`);
   return { ok: true, site: next, built: build.ok, buildOut: build.ok ? '' : build.out, sync };
+}
+
+// 只切版式：本地重建，不提交不推送（想上线再点「保存并同步」）
+async function switchTheme(theme) {
+  const t = String(theme || '').toLowerCase();
+  if (!THEME_KEYS.includes(t)) throw new Error('未知版式');
+  const cur = await readSite();
+  cur.theme = t;
+  await writeFile(SITE_FILE, JSON.stringify(cur, null, 2) + '\n', 'utf8');
+  const build = await node(['scripts/build.mjs']);
+  return { ok: true, theme: t, site: cur, built: build.ok, out: build.ok ? '' : build.out.slice(-300) };
 }
 
 /* ---------- 文章 ---------- */
@@ -411,7 +427,13 @@ const MIME = {
   '.avif': 'image/avif',
   '.svg': 'image/svg+xml',
   '.bmp': 'image/bmp',
-  '.ico': 'image/x-icon'
+  '.ico': 'image/x-icon',
+  '.html': 'text/html; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.xml': 'application/xml; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8'
 };
 
 // 管理器里预览要显示 /uploads 的图，顺便把 public 下的其它静态文件也放出去
@@ -433,6 +455,31 @@ async function servePublic(urlPath, res) {
   }
 }
 
+// 本地预览：把 dist 以 /site/ 前缀放出来（HTML 里的绝对链接临时改写，只影响预览）
+async function serveDist(urlPath, res) {
+  let rel = decodeURIComponent(urlPath.replace(/^\/site/, ''));
+  if (!rel || rel === '/') rel = '/index.html';
+  if (rel.endsWith('/')) rel += 'index.html';
+  const full = path.join(DIST_DIR, rel);
+  if (!path.resolve(full).startsWith(path.resolve(DIST_DIR))) {
+    json(res, 403, { error: '路径不合法' });
+    return;
+  }
+  const s = await stat(full).catch(() => null);
+  if (!s || !s.isFile()) {
+    json(res, 404, { error: '还没构建过，先在管理器里点一次版式或发布' });
+    return;
+  }
+  const ext = path.extname(full).toLowerCase();
+  if (ext === '.html') {
+    const html = (await readFile(full, 'utf8')).replace(/(href|src)="\//g, '$1="/site/');
+    res.writeHead(200, { 'content-type': MIME['.html'], 'cache-control': 'no-store' }).end(html);
+    return;
+  }
+  res.writeHead(200, { 'content-type': MIME[ext] || 'application/octet-stream', 'cache-control': 'no-cache', 'content-length': s.size });
+  createReadStream(full).pipe(res);
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
   try {
@@ -446,6 +493,9 @@ const server = createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname.startsWith('/uploads/')) return servePublic(url.pathname, res);
     if (req.method === 'GET' && url.pathname === '/style.css') return servePublic(url.pathname, res);
+    if (req.method === 'GET' && (url.pathname === '/site' || url.pathname.startsWith('/site/'))) {
+      return serveDist(url.pathname, res);
+    }
 
     if (req.method === 'GET' && url.pathname === '/api/posts') return json(res, 200, await listPosts());
     if (req.method === 'GET' && url.pathname === '/api/status') return json(res, 200, await status());
@@ -468,6 +518,7 @@ const server = createServer(async (req, res) => {
       if (url.pathname === '/api/publish') return json(res, 200, await publish(payload));
       if (url.pathname === '/api/upload') return json(res, 200, await upload(payload));
       if (url.pathname === '/api/settings') return json(res, 200, await saveSite(payload));
+      if (url.pathname === '/api/theme') return json(res, 200, await switchTheme(payload.theme));
       return json(res, 404, { error: '接口不存在' });
     }
 
