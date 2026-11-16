@@ -135,7 +135,7 @@ function renderList() {
         .map((p) => {
           const on = state.current && state.current.p === p.p;
           return `<div class="row${on ? ' on' : ''}" data-p="${esc(p.p)}" title="${esc(p.title)}">
-  ${p.draft ? '<i class="dmark"></i>' : ''}<span class="t">${esc(p.title)}</span><span class="rd">${p.date.slice(5)}</span>
+  ${p.draft ? '<i class="dmark"></i>' : ''}<span class="t">${esc(p.title)}</span>${p.changed ? '<i class="chg" title="有改动未发布"></i>' : ''}<span class="rd">${p.date.slice(5)}</span>
   <button class="del" data-del="${esc(p.p)}" title="删除">×</button>
 </div>`;
         })
@@ -428,6 +428,13 @@ $('btn-pv').onclick = () => setPreview($('main').classList.contains('no-pv'));
 $('pv-close').onclick = () => setPreview(false);
 $('btn-theme').onclick = () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
 
+function setFocus(on) {
+  document.querySelector('.app').classList.toggle('focus', on);
+  $('btn-focus').style.color = on ? 'var(--accent)' : '';
+  localStorage.setItem('focus', on ? '1' : '0');
+}
+$('btn-focus').onclick = () => setFocus(!document.querySelector('.app').classList.contains('focus'));
+
 /* ---------- 命令面板 ---------- */
 
 let palIdx = 0;
@@ -505,6 +512,7 @@ document.addEventListener('keydown', (e) => {
   if (mod && e.key.toLowerCase() === 'b') { e.preventDefault(); actions.bold(); }
   if (mod && e.key.toLowerCase() === 'i') { e.preventDefault(); actions.italic(); }
   if (mod && e.key.toLowerCase() === 'n') { e.preventDefault(); dialog('new', '新建文章', '文件名会自动带上今天的日期，标题之后还能改。', '', '创建'); }
+  if (mod && e.key === '\\') { e.preventDefault(); setFocus(!document.querySelector('.app').classList.contains('focus')); }
   if (e.key === 'Escape') {
     if ($('palette').classList.contains('on')) closePalette();
     else if ($('mask').classList.contains('on')) closeDialog();
@@ -551,6 +559,7 @@ $('body').addEventListener('drop', async (e) => {
 const urlTheme = new URLSearchParams(location.search).get('theme');
 applyTheme(urlTheme || localStorage.getItem('theme') || 'light');
 setPreview(localStorage.getItem('pv') !== '0');
+setFocus(new URLSearchParams(location.search).get('focus') === '1' || localStorage.getItem('focus') === '1');
 setSave('', '未选择文章');
 
 loadPosts()

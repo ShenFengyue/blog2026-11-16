@@ -92,8 +92,11 @@
   .ghost svg{width:13px;height:13px;stroke-width:2}
 
   /* ---------- 主体 ---------- */
-  .body{display:grid;grid-template-columns:290px minmax(0,1fr) var(--pv-w,404px);min-height:0;transition:grid-template-columns .26s cubic-bezier(.3,.9,.3,1)}
+  .body{display:grid;grid-template-columns:var(--side-w,290px) minmax(0,1fr) var(--pv-w,404px);min-height:0;transition:grid-template-columns .26s cubic-bezier(.3,.9,.3,1)}
   .body.no-pv{--pv-w:0px}
+  .app.focus{--side-w:0px;--pv-w:0px}
+  .app.focus .side{opacity:0;pointer-events:none;overflow:hidden}
+  .app.focus .pv{opacity:0;pointer-events:none}
 
   /* 侧栏 */
   .side{
@@ -141,6 +144,7 @@
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;
   }
   .rd{font-size:10.5px;color:var(--ink-4);font-family:var(--mono);flex:none}
+  .chg{width:4px;height:4px;border-radius:50%;background:#b0782a;flex:none;margin-bottom:2px;opacity:.85}
   .dmark{width:4px;height:4px;border-radius:50%;background:var(--accent);flex:none;opacity:.75;margin-bottom:1px}
   .del{
     position:absolute;right:4px;top:50%;transform:translateY(-50%);
@@ -342,6 +346,7 @@
     <div class="crumb" id="crumb"></div>
     <div class="bar-right">
       <div class="state"><i class="dot" id="dot"></i><span id="repo-text">连接中</span></div>
+      <button class="icon" id="btn-focus" title="专注模式 Ctrl+\"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 4H4v5M15 4h5v5M15 20h5v-5M9 20H4v-5"/></svg></button>
       <button class="icon" id="btn-theme" title="切换主题"></button>
       <button class="icon" id="btn-pv" title="预览面板"></button>
       <button class="ghost" id="btn-new" title="新建文章 Ctrl+N"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 5v14M5 12h14"/></svg>新建</button>
@@ -446,3 +451,5 @@
 <script src="/app.js"></script>
 </body>
 </html>
+
+

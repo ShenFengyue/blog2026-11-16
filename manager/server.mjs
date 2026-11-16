@@ -76,15 +76,18 @@ const node = (args) =>
 async function listPosts() {
   const files = await walk(CONTENT);
   const items = [];
+  const dirtyRaw = (await git(['status', '--porcelain', '-z'])).out;
   for (const f of files) {
     const raw = await readFile(f, 'utf8');
     const { data } = parseFront(raw);
     const s = await stat(f);
+    const rel = path.relative(CONTENT, f).replace(/\\/g, '/');
     items.push({
-      p: path.relative(CONTENT, f).replace(/\\/g, '/'),
+      p: rel,
       title: data.title || path.basename(f, '.md'),
       date: (data.date || s.mtime.toISOString().slice(0, 10)).toString().slice(0, 10),
       draft: data.draft === true,
+      changed: dirtyRaw.includes(`content/posts/${rel}`),
       mtime: s.mtimeMs
     });
   }

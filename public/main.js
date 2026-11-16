@@ -14,6 +14,38 @@
     });
   }
 
+  // 手机端目录抽屉
+  const navBtn = document.getElementById('navbtn');
+  const sidebar = document.getElementById('sidebar');
+  if (navBtn && sidebar) {
+    navBtn.addEventListener('click', () => sidebar.classList.toggle('nav-open'));
+    sidebar.addEventListener('click', (e) => {
+      if (e.target.closest('a')) sidebar.classList.remove('nav-open');
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') sidebar.classList.remove('nav-open');
+    });
+  }
+
+  // 阅读进度
+  const bar = document.getElementById('progress');
+  const content = document.querySelector('.content');
+  if (bar) {
+    if (!content) bar.style.display = 'none';
+    else {
+      const upd = () => {
+        const top = content.getBoundingClientRect().top;
+        const total = content.offsetHeight - window.innerHeight + 140;
+        const done = -top + 100;
+        const p = total > 0 ? Math.min(1, Math.max(0, done / total)) : 1;
+        bar.style.width = (p * 100).toFixed(2) + '%';
+      };
+      document.addEventListener('scroll', upd, { passive: true });
+      window.addEventListener('resize', upd);
+      upd();
+    }
+  }
+
   // 侧栏年份折叠（记住状态）
   document.querySelectorAll('.group').forEach((g, i) => {
     if (localStorage.getItem('closed-' + i) === '1') g.classList.add('closed');
