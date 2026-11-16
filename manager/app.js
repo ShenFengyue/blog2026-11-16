@@ -497,6 +497,7 @@ const altOf = (file) => {
 async function uploadImages(files) {
   const imgs = [...files].filter(isImage);
   if (!imgs.length) return;
+  if (!state.current) { toast('先选一篇文章（或新建一篇）再贴图', 3200); return; }
   if (state.uploading) { toast('上一批图片还在上传，稍等一下', 3000); return; }
 
   const ta = $('body');
